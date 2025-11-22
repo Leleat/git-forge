@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "rootDir": "src",
+    "erasableSyntaxOnly": true,
+    "outDir": "dist",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"],
+    }
+  }
+}
