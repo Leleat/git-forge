@@ -4,6 +4,8 @@ A simple CLI tool for basic interactions with issues and pull requests across Gi
 
 ## Usage
 
+`git-forge` requires `Node.js` to run. Other than node, `git-forge` only uses dev dependencies.
+
 ```sh
 git forge [<subcommand>] [<options>]
 ```
