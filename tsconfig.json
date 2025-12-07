@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "esnext",
-    "rootDir": "src",
+    "rootDir": ".",
     "erasableSyntaxOnly": true,
     "outDir": "dist",
     "module": "es2022",
@@ -12,6 +12,7 @@
     "types": ["node"],
     "paths": {
       "@/*": ["./src/*"],
+      "@tests/*": ["./tests/*"],
     }
   }
 }
