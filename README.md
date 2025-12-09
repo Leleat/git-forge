@@ -29,8 +29,8 @@ Note that due to differing forge APIs, some behavior may vary across forges. Use
     fopenissue = "!git forge issue | fzf | cut -f 2 | xargs xdg-open &> /dev/null"
     # Open the issues page on a git forge (on linux); e.g. https://github.com/Leleat/git-forge/issues
     fopenissues = "!git forge web --type issues | xargs xdg-open &> /dev/null"
-    # Open the PRs page on a git forge (on linux); e.g. https://github.com/Leleat/git-forge/pulls
-    fopenprs = "!git forge web --type prs | xargs xdg-open &> /dev/null"
+    # Search for a PR and check it out locally
+    freviewpr = "!git forge pr | fzf | cut -d' ' -f 1 | xargs git forge pr checkout"
 ```
 
 ## Installation
@@ -41,6 +41,10 @@ npm run build
 ```
 
 Move `dist/git-forge` to a PATH directory.
+
+## Support Me :heart:
+
+If you like this project, you can support me with [GitHub Sponsors](https://github.com/sponsors/leleat).
 
 ## License
 
