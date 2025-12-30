@@ -2,9 +2,10 @@
 
 A simple CLI tool for basic interactions with issues and pull requests across GitHub, GitLab, Gitea, and Forgejo.
 
-## Usage
+> [!WARNING]
+> This project is mostly for me to practice the Rust programming language.
 
-`git-forge` requires `Node.js` to run. Other than node, `git-forge` only uses dev dependencies.
+## Usage
 
 ```sh
 git forge [<subcommand>] [<options>]
@@ -13,10 +14,10 @@ git forge [<subcommand>] [<options>]
 ### Subcommands
 
 - `issue` - List issues
-- `pr` - List pull requests and create a pull request for the current branch
-- `web` - Get the web URL for repositories
+- `pr` - List pull requests, create a pull request, and checkout a pull request
+- `web` - Get the web URLs for the repository, for the issues, and for the PRs
 
-Note that due to differing forge APIs, some behavior may vary across forges. Use `--help` for detailed information.
+Note that due to differing forge APIs, some behavior may vary across forges. E.g. filtering of PRs may happen client-side for some forges, while it happens server-side for others.
 
 ### Example Use Cases
 
@@ -35,14 +36,16 @@ Note that due to differing forge APIs, some behavior may vary across forges. Use
 
 ## Installation
 
+Clone the repository. Then run
+
 ```sh
-npm install
-npm run build
+# First, cd into the <GIT_REPO>
+cargo build --release
 ```
 
-Move `dist/git-forge` to a PATH directory.
+Move `target/release/git-forge` to a `$PATH` directory.
 
-## Support Me :heart:
+## Support Me
 
 If you like this project, you can support me with [GitHub Sponsors](https://github.com/sponsors/leleat).
 
