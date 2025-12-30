@@ -1,0 +1,152 @@
+[
+  {
+    "iid": 1,
+    "title": "Add login feature",
+    "state": "opened",
+    "labels": ["enhancement"],
+    "author": {
+      "username": "alice"
+    },
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-16T14:20:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/1",
+    "source_branch": "feature/login",
+    "target_branch": "main",
+    "draft": false
+  },
+  {
+    "iid": 2,
+    "title": "Fix authentication bug",
+    "state": "merged",
+    "labels": ["bug"],
+    "author": {
+      "username": "bob"
+    },
+    "created_at": "2024-01-10T09:00:00Z",
+    "updated_at": "2024-01-12T16:45:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/2",
+    "source_branch": "fix/auth-bug",
+    "target_branch": "main",
+    "draft": false
+  },
+  {
+    "iid": 3,
+    "title": "Draft: Refactor API handlers",
+    "state": "opened",
+    "labels": ["refactor"],
+    "author": {
+      "username": "charlie"
+    },
+    "created_at": "2024-01-20T08:15:00Z",
+    "updated_at": "2024-01-22T11:30:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/3",
+    "source_branch": "refactor/api-handlers",
+    "target_branch": "main",
+    "draft": true
+  },
+  {
+    "iid": 4,
+    "title": "Update dependencies",
+    "state": "merged",
+    "labels": ["dependencies"],
+    "author": {
+      "username": "alice"
+    },
+    "created_at": "2024-01-05T13:00:00Z",
+    "updated_at": "2024-01-06T10:20:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/4",
+    "source_branch": "deps/update-all",
+    "target_branch": "main",
+    "draft": false
+  },
+  {
+    "iid": 5,
+    "title": "Add dark mode UI",
+    "state": "opened",
+    "labels": ["enhancement", "ui"],
+    "author": {
+      "username": "bob"
+    },
+    "created_at": "2024-01-18T15:45:00Z",
+    "updated_at": "2024-01-19T09:10:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/5",
+    "source_branch": "feature/dark-mode",
+    "target_branch": "main",
+    "draft": false
+  },
+  {
+    "iid": 6,
+    "title": "Improve test coverage",
+    "state": "merged",
+    "labels": ["testing"],
+    "author": {
+      "username": "charlie"
+    },
+    "created_at": "2024-01-08T11:30:00Z",
+    "updated_at": "2024-01-09T14:15:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/6",
+    "source_branch": "test/increase-coverage",
+    "target_branch": "main",
+    "draft": false
+  },
+  {
+    "iid": 7,
+    "title": "Add rate limiting to API",
+    "state": "opened",
+    "labels": ["enhancement", "api"],
+    "author": {
+      "username": "alice"
+    },
+    "created_at": "2024-01-22T10:00:00Z",
+    "updated_at": "2024-01-23T16:30:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/7",
+    "source_branch": "feature/rate-limiting",
+    "target_branch": "main",
+    "draft": false
+  },
+  {
+    "iid": 8,
+    "title": "Fix memory leak",
+    "state": "closed",
+    "labels": ["bug", "critical"],
+    "author": {
+      "username": "bob"
+    },
+    "created_at": "2024-01-12T07:20:00Z",
+    "updated_at": "2024-01-12T18:40:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/8",
+    "source_branch": "fix/memory-leak",
+    "target_branch": "main",
+    "draft": false
+  },
+  {
+    "iid": 9,
+    "title": "Draft: New feature exploration",
+    "state": "opened",
+    "labels": ["exploration"],
+    "author": {
+      "username": "charlie"
+    },
+    "created_at": "2024-01-25T12:00:00Z",
+    "updated_at": "2024-01-25T12:00:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/9",
+    "source_branch": "experiment/new-feature",
+    "target_branch": "develop",
+    "draft": true
+  },
+  {
+    "iid": 10,
+    "title": "Security patch for auth",
+    "state": "merged",
+    "labels": ["security", "critical"],
+    "author": {
+      "username": "alice"
+    },
+    "created_at": "2024-01-14T09:30:00Z",
+    "updated_at": "2024-01-14T11:00:00Z",
+    "web_url": "http://localhost:3002/user/repo/-/merge_requests/10",
+    "source_branch": "security/auth-patch",
+    "target_branch": "main",
+    "draft": false
+  }
+]
