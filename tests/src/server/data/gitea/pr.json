@@ -1,0 +1,232 @@
+[
+  {
+    "number": 1,
+    "title": "Add login feature",
+    "state": "open",
+    "labels": [{ "name": "enhancement" }],
+    "user": {
+      "login": "alice"
+    },
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-16T14:20:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/1",
+    "head": {
+      "ref": "feature/login"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": false,
+    "merged": false,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/1"
+    }
+  },
+  {
+    "number": 2,
+    "title": "Fix authentication bug",
+    "state": "closed",
+    "labels": [{ "name": "bug" }],
+    "user": {
+      "login": "bob"
+    },
+    "created_at": "2024-01-10T09:00:00Z",
+    "updated_at": "2024-01-12T16:45:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/2",
+    "head": {
+      "ref": "fix/auth-bug"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": false,
+    "merged": true,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/2"
+    }
+  },
+  {
+    "number": 3,
+    "title": "WIP: Refactor API handlers",
+    "state": "open",
+    "labels": [{ "name": "refactor" }],
+    "user": {
+      "login": "charlie"
+    },
+    "created_at": "2024-01-20T08:15:00Z",
+    "updated_at": "2024-01-22T11:30:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/3",
+    "head": {
+      "ref": "refactor/api-handlers"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": true,
+    "merged": false,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/3"
+    }
+  },
+  {
+    "number": 4,
+    "title": "Update dependencies",
+    "state": "closed",
+    "labels": [{ "name": "dependencies" }],
+    "user": {
+      "login": "alice"
+    },
+    "created_at": "2024-01-05T13:00:00Z",
+    "updated_at": "2024-01-06T10:20:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/4",
+    "head": {
+      "ref": "deps/update-all"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": false,
+    "merged": true,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/4"
+    }
+  },
+  {
+    "number": 5,
+    "title": "Add dark mode UI",
+    "state": "open",
+    "labels": [{ "name": "enhancement" }, { "name": "ui" }],
+    "user": {
+      "login": "bob"
+    },
+    "created_at": "2024-01-18T15:45:00Z",
+    "updated_at": "2024-01-19T09:10:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/5",
+    "head": {
+      "ref": "feature/dark-mode"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": false,
+    "merged": false,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/5"
+    }
+  },
+  {
+    "number": 6,
+    "title": "Improve test coverage",
+    "state": "closed",
+    "labels": [{ "name": "testing" }],
+    "user": {
+      "login": "charlie"
+    },
+    "created_at": "2024-01-08T11:30:00Z",
+    "updated_at": "2024-01-09T14:15:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/6",
+    "head": {
+      "ref": "test/increase-coverage"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": false,
+    "merged": true,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/6"
+    }
+  },
+  {
+    "number": 7,
+    "title": "Add rate limiting to API",
+    "state": "open",
+    "labels": [{ "name": "enhancement" }, { "name": "api" }],
+    "user": {
+      "login": "alice"
+    },
+    "created_at": "2024-01-22T10:00:00Z",
+    "updated_at": "2024-01-23T16:30:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/7",
+    "head": {
+      "ref": "feature/rate-limiting"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": false,
+    "merged": false,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/7"
+    }
+  },
+  {
+    "number": 8,
+    "title": "Fix memory leak",
+    "state": "closed",
+    "labels": [{ "name": "bug" }, { "name": "critical" }],
+    "user": {
+      "login": "bob"
+    },
+    "created_at": "2024-01-12T07:20:00Z",
+    "updated_at": "2024-01-12T18:40:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/8",
+    "head": {
+      "ref": "fix/memory-leak"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": false,
+    "merged": false,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/8"
+    }
+  },
+  {
+    "number": 9,
+    "title": "Draft: New feature exploration",
+    "state": "open",
+    "labels": [{ "name": "exploration" }],
+    "user": {
+      "login": "charlie"
+    },
+    "created_at": "2024-01-25T12:00:00Z",
+    "updated_at": "2024-01-25T12:00:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/9",
+    "head": {
+      "ref": "experiment/new-feature"
+    },
+    "base": {
+      "ref": "develop"
+    },
+    "draft": true,
+    "merged": false,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/9"
+    }
+  },
+  {
+    "number": 10,
+    "title": "Security patch for auth",
+    "state": "closed",
+    "labels": [{ "name": "security" }, { "name": "critical" }],
+    "user": {
+      "login": "alice"
+    },
+    "created_at": "2024-01-14T09:30:00Z",
+    "updated_at": "2024-01-14T11:00:00Z",
+    "html_url": "http://localhost:3003/user/repo/pull/10",
+    "head": {
+      "ref": "security/auth-patch"
+    },
+    "base": {
+      "ref": "main"
+    },
+    "draft": false,
+    "merged": true,
+    "pull_request": {
+      "url": "http://localhost:3003/api/v1/repos/user/repo/pulls/10"
+    }
+  }
+]

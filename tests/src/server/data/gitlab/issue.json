@@ -1,0 +1,102 @@
+[
+  {
+    "iid": 1,
+    "title": "Add user authentication",
+    "state": "opened",
+    "labels": ["enhancement", "high-priority"],
+    "author": {
+      "username": "alice"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/1"
+  },
+  {
+    "iid": 2,
+    "title": "Fix crash on startup",
+    "state": "opened",
+    "labels": ["bug", "critical"],
+    "author": {
+      "username": "bob"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/2"
+  },
+  {
+    "iid": 3,
+    "title": "Update documentation",
+    "state": "closed",
+    "labels": ["documentation"],
+    "author": {
+      "username": "alice"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/3"
+  },
+  {
+    "iid": 4,
+    "title": "Improve performance",
+    "state": "opened",
+    "labels": ["enhancement", "performance"],
+    "author": {
+      "username": "charlie"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/4"
+  },
+  {
+    "iid": 5,
+    "title": "Add dark mode support",
+    "state": "opened",
+    "labels": ["enhancement", "ui"],
+    "author": {
+      "username": "alice"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/5"
+  },
+  {
+    "iid": 6,
+    "title": "Fix memory leak in parser",
+    "state": "closed",
+    "labels": ["bug", "memory"],
+    "author": {
+      "username": "bob"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/6"
+  },
+  {
+    "iid": 7,
+    "title": "Add API rate limiting",
+    "state": "opened",
+    "labels": ["enhancement", "api"],
+    "author": {
+      "username": "charlie"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/7"
+  },
+  {
+    "iid": 8,
+    "title": "Refactor database layer",
+    "state": "opened",
+    "labels": ["refactor", "database"],
+    "author": {
+      "username": "alice"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/8"
+  },
+  {
+    "iid": 9,
+    "title": "Security vulnerability in auth module",
+    "state": "opened",
+    "labels": ["security", "critical"],
+    "author": {
+      "username": "bob"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/9"
+  },
+  {
+    "iid": 10,
+    "title": "Add unit tests for parser",
+    "state": "closed",
+    "labels": ["testing"],
+    "author": {
+      "username": "charlie"
+    },
+    "web_url": "http://localhost:3002/user/repo/-/issues/10"
+  }
+]
