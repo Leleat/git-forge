@@ -25,13 +25,13 @@ Note that due to differing forge APIs, some behavior may vary across forges. E.g
 # git aliases in .gitconfig
 [alias]
     # Search for and copy an issue link to clipboard. `copy` is a custom script
-    fcpissue = "!git forge issue | fzf | cut -f 2 | copy"
+    fcpissue = "!git forge issue | fzf | cut -f 3 | copy"
     # Search for and open an issue in your browser (on linux)
-    fopenissue = "!git forge issue | fzf | cut -f 2 | xargs xdg-open &> /dev/null"
+    fopenissue = "!git forge issue | fzf | cut -f 3 | xargs xdg-open &> /dev/null"
     # Open the issues page on a git forge (on linux); e.g. https://github.com/Leleat/git-forge/issues
-    fopenissues = "!git forge web --type issues | xargs xdg-open &> /dev/null"
+    fopenissues = "!git forge web --target issues | xargs xdg-open &> /dev/null"
     # Search for a PR and check it out locally
-    freviewpr = "!git forge pr | fzf | cut -d' ' -f 1 | xargs git forge pr checkout"
+    freviewpr = "!git forge pr list | fzf | cut -f 1 | xargs git forge pr checkout"
 ```
 
 ## Installation
