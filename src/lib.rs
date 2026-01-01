@@ -17,7 +17,6 @@ pub fn run() -> anyhow::Result<()> {
             PrCommand::Create(args) => cli::create_pr(args),
             PrCommand::List(args) => cli::list_prs(args),
         },
-        GitForgeCommand::Web(args) => cli::print_web_url(args),
         GitForgeCommand::Completions(args) => cli::generate_completions(args),
     }
 }

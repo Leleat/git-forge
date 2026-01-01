@@ -5,7 +5,6 @@ use crate::{
         forge::http_client::{HttpClient, WithAuth},
         issue::{Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
-        web::WebTarget,
     },
     git::GitRemoteData,
 };
@@ -236,21 +235,6 @@ pub fn create_pr(
 
 pub fn get_pr_ref(pr_number: u32) -> String {
     format!("pull/{pr_number}/head")
-}
-
-pub fn build_web_url(remote: &GitRemoteData, target: &WebTarget) -> String {
-    let host = &remote.host;
-    let path = &remote.path;
-    let repo_url = match remote.port {
-        Some(port) => format!("https://{host}:{port}/{path}"),
-        None => format!("https://{host}/{path}"),
-    };
-
-    match target {
-        WebTarget::Issues => format!("{repo_url}/issues"),
-        WebTarget::Mrs | WebTarget::Prs => format!("{repo_url}/pulls"),
-        WebTarget::Repository => repo_url,
-    }
 }
 
 // =============================================================================
