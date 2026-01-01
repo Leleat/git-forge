@@ -8,17 +8,22 @@ mod forge {
     pub use forge_client::{ApiType, ForgeClient, create_forge_client};
 }
 
+mod completions;
 mod issue;
 mod pr;
 mod web;
 
+pub use completions::generate_completions;
 pub use issue::list_issues;
 pub use pr::{PrCommand, checkout_pr, create_pr, list_prs};
 pub use web::print_web_url;
 
 use clap::{Parser, Subcommand};
 
-use crate::cli::{issue::IssueCommandArgs, pr::PrCommandArgs, web::WebCommandArgs};
+use crate::cli::{
+    completions::CompletionsCommandArgs, issue::IssueCommandArgs, pr::PrCommandArgs,
+    web::WebCommandArgs,
+};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -29,6 +34,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum GitForgeCommand {
+    /// Generate shell completions.
+    #[command(alias = "c", about = "Generate shell completions")]
+    Completions(CompletionsCommandArgs),
+
     /// List issues from the remote repository.
     #[command(alias = "i", about = "List issues from the remote repository")]
     Issue(IssueCommandArgs),
