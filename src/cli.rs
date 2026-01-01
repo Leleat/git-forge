@@ -1,11 +1,13 @@
 mod forge {
-    mod forge_client;
-    mod gitea;
-    mod github;
-    mod gitlab;
+    pub mod gitea;
+    pub mod github;
+    pub mod gitlab;
+
+    mod api_type;
     mod http_client;
 
-    pub use forge_client::{ApiType, ForgeClient, create_forge_client};
+    pub use api_type::{ApiType, guess_api_type_from_host};
+    pub use http_client::HttpClient;
 }
 
 mod completions;

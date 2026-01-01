@@ -1,13 +1,23 @@
+//! The `completions` subcommand.
+
 use clap::{Args, CommandFactory};
 use clap_complete::{Shell, generate};
 
 use crate::cli::Cli;
+
+// =============================================================================
+// CLI Arguments
+// =============================================================================
 
 #[derive(Debug, Args)]
 pub struct CompletionsCommandArgs {
     /// The shell to generate completions for
     pub shell: Shell,
 }
+
+// =============================================================================
+// Command Logic
+// =============================================================================
 
 pub fn generate_completions(args: CompletionsCommandArgs) -> anyhow::Result<()> {
     let mut cmd = Cli::command();

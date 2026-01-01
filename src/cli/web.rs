@@ -1,8 +1,12 @@
 //! The `web` subcommand.
 
+use anyhow::Context;
 use clap::{Args, ValueEnum};
 
-use crate::cli::forge::{self, ApiType};
+use crate::{
+    cli::forge::{self, ApiType, gitea, github, gitlab},
+    git,
+};
 
 // =============================================================================
 // CLI Arguments
@@ -51,10 +55,22 @@ pub enum WebTarget {
 /// Constructs a URL for viewing the repository, issues, or pull requests in a
 /// web browser. If no target is specified, defaults to the repository page.
 pub fn print_web_url(args: WebCommandArgs) -> anyhow::Result<()> {
-    let forge_client = forge::create_forge_client(args.remote, args.api, None)?;
-    let url = forge_client.get_web_url(args.target.unwrap_or(WebTarget::Repository))?;
+    let remote = git::get_remote_data(&args.remote)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
+    let api_type = match args.api {
+        Some(api_type) => api_type,
+        None => forge::guess_api_type_from_host(&remote.host)
+            .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
+    };
+    let target = args.target.unwrap_or(WebTarget::Repository);
+    let get_web_url = match api_type {
+        ApiType::GitHub => github::build_web_url,
+        ApiType::GitLab => gitlab::build_web_url,
+        ApiType::Forgejo | ApiType::Gitea => gitea::build_web_url,
+    };
+    let url = get_web_url(&remote, &target);
 
-    println!("{url}");
+    println!("{url}",);
 
     Ok(())
 }

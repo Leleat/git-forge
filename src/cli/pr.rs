@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::{ArgAction, Args, Subcommand};
 
 use crate::{
-    cli::forge::{self, ApiType},
+    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
     git,
 };
 
@@ -217,6 +217,23 @@ pub struct Pr {
     pub draft: bool,
 }
 
+pub struct ListPrsFilters<'a> {
+    pub author: Option<&'a str>,
+    pub labels: &'a [String],
+    pub page: u32,
+    pub per_page: u32,
+    pub state: &'a PrState,
+    pub draft: bool,
+}
+
+pub struct CreatePrOptions<'a> {
+    pub title: &'a str,
+    pub source_branch: &'a str,
+    pub target_branch: &'a str,
+    pub body: Option<&'a str>,
+    pub draft: bool,
+}
+
 // =============================================================================
 // Command Logic
 // =============================================================================
@@ -224,22 +241,43 @@ pub struct Pr {
 /// Lists pull requests from the remote repository's forge and outputs them as
 /// TSV.
 pub fn list_prs(args: PrListCommandArgs) -> anyhow::Result<()> {
-    let forge = forge::create_forge_client(args.remote, args.api, args.api_url)?;
-    let prs = forge.get_prs(
-        args.auth,
-        args.author.as_deref(),
-        args.labels.as_ref(),
-        args.page,
-        args.per_page,
-        args.state.unwrap_or(PrState::Open),
-        args.draft,
-    )?;
-    let columns = if args.columns.is_empty() {
-        None
-    } else {
-        Some(args.columns)
+    let http_client = HttpClient::new();
+    let remote = git::get_remote_data(&args.remote)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
+    let api_type = match args.api {
+        Some(api_type) => api_type,
+        None => forge::guess_api_type_from_host(&remote.host)
+            .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
     };
-    let output = format_prs_to_tsv(&prs, columns);
+    let pr_filters = ListPrsFilters {
+        author: args.author.as_deref(),
+        labels: &args.labels,
+        page: args.page,
+        per_page: args.per_page,
+        state: &args.state.unwrap_or(PrState::Open),
+        draft: args.draft,
+    };
+    let get_prs = match api_type {
+        ApiType::GitHub => github::get_prs,
+        ApiType::GitLab => gitlab::get_prs,
+        ApiType::Gitea | ApiType::Forgejo => gitea::get_prs,
+    };
+    let prs = get_prs(
+        &http_client,
+        &remote,
+        args.api_url.as_deref(),
+        &pr_filters,
+        args.auth,
+    )?;
+
+    let output = format_prs_to_tsv(
+        &prs,
+        if args.columns.is_empty() {
+            vec!["id".to_string(), "title".to_string(), "url".to_string()]
+        } else {
+            args.columns
+        },
+    );
 
     if !output.is_empty() {
         println!("{output}");
@@ -250,13 +288,27 @@ pub fn list_prs(args: PrListCommandArgs) -> anyhow::Result<()> {
 
 /// Checks out a pull request as a local branch.
 pub fn checkout_pr(args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
+    let api_type = match git::get_remote_data(&args.remote) {
+        Ok(remote) => forge::guess_api_type_from_host(&remote.host)
+            .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
+        Err(e) => match args.api {
+            Some(api_type) => api_type,
+            None => anyhow::bail!(
+                "No API type was provided and failed to guess it from the git remote URL: {}",
+                e
+            ),
+        },
+    };
+    let get_pr_ref = match api_type {
+        ApiType::GitHub => github::get_pr_ref,
+        ApiType::GitLab => gitlab::get_pr_ref,
+        ApiType::Gitea | ApiType::Forgejo => gitea::get_pr_ref,
+    };
     let pr_number = args.number;
+    let pr_ref = get_pr_ref(pr_number);
     let branch_name = format!("pr-{pr_number}");
-    let remote = args.remote.clone();
-    let forge = forge::create_forge_client(args.remote, args.api, args.api_url)?;
-    let pr_ref = forge.get_pr_ref(pr_number);
 
-    git::fetch_pull_request(&pr_ref, &branch_name, &remote)?;
+    git::fetch_pull_request(&pr_ref, &branch_name, &args.remote)?;
     git::checkout_branch(&branch_name)?;
 
     eprintln!("Successfully checked out PR \"{pr_number}\" to branch \"{branch_name}\"");
@@ -280,19 +332,36 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
         );
     }
 
-    let title = args.title.unwrap_or_else(|| current_branch.clone());
+    let http_client = HttpClient::new();
+    let remote = git::get_remote_data(&args.remote)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
+    let api_type = match args.api {
+        Some(api_type) => api_type,
+        None => forge::guess_api_type_from_host(&remote.host)
+            .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
+    };
 
     if args.push {
         git::push_branch(&current_branch, &args.remote, true)?;
     }
 
-    let forge_client = forge::create_forge_client(args.remote, args.api, args.api_url)?;
-    let pr = forge_client.create_pr(
-        &title,
-        &current_branch,
-        &target_branch,
-        args.body.as_deref(),
-        args.draft,
+    let create_pr = match api_type {
+        ApiType::GitHub => github::create_pr,
+        ApiType::GitLab => gitlab::create_pr,
+        ApiType::Gitea | ApiType::Forgejo => gitea::create_pr,
+    };
+    let create_options = CreatePrOptions {
+        title: &args.title.unwrap_or_else(|| current_branch.clone()),
+        source_branch: &current_branch,
+        target_branch: &target_branch,
+        body: args.body.as_deref(),
+        draft: args.draft,
+    };
+    let pr = create_pr(
+        &http_client,
+        &remote,
+        args.api_url.as_deref(),
+        &create_options,
     )?;
 
     println!("PR created at {}", pr.url);
@@ -304,10 +373,7 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
 // Private Helpers
 // =============================================================================
 
-fn format_prs_to_tsv(prs: &[Pr], columns: Option<Vec<String>>) -> String {
-    let columns =
-        columns.unwrap_or_else(|| vec!["id".to_string(), "title".to_string(), "url".to_string()]);
-
+fn format_prs_to_tsv(prs: &[Pr], columns: Vec<String>) -> String {
     prs.iter()
         .map(|pr| {
             columns

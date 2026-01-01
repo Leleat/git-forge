@@ -4,6 +4,25 @@ use std::process::Command;
 
 use anyhow::Context;
 
+/// Gets and parses the remote URL
+///
+/// # Errors
+///
+/// Returns an error if the git command fails or the remote URL has an unknown
+/// format.
+pub fn get_remote_data(remote: &str) -> anyhow::Result<GitRemoteData> {
+    let remote_url = get_remote_url(remote)
+        .with_context(|| format!("Failed to get URL for remote '{}'", remote))?;
+
+    match parse_remote_url(&remote_url) {
+        Some(remote_data) => Ok(remote_data),
+        None => anyhow::bail!(
+            "Couldn't parse git remote URL. Unrecognized format. Supported: https and ssh. Found remote URL: {}",
+            &remote_url
+        ),
+    }
+}
+
 /// Gets the URL for a git remote.
 ///
 /// # Errors
