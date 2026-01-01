@@ -182,6 +182,43 @@ pub fn push_branch(branch: &str, remote: &str, set_upstream: bool) -> anyhow::Re
     Ok(())
 }
 
+/// Parses commit-ish into their corresponding commit SHAs
+///
+/// # Errors
+///
+/// Returns an error if the push operation fails.
+pub fn rev_parse(arg: &str) -> anyhow::Result<String> {
+    let output = Command::new("git")
+        .arg("rev-parse")
+        .arg(arg)
+        .output()
+        .context("Failed to execute git-rev-parse")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        anyhow::bail!("Failed to git rev-parse {arg}: {stderr}");
+    }
+
+    let sha = String::from_utf8_lossy(&output.stdout);
+    let sha = sha.trim();
+
+    if sha.is_empty() {
+        anyhow::bail!("No commit hash");
+    }
+
+    Ok(sha.to_string())
+}
+
+/// Gets the absolute path of the git repository
+///
+/// # Errors
+///
+/// Returns an error if the git command fails; e.g. if there is no working tree.
+pub fn get_absolute_repo_root() -> anyhow::Result<String> {
+    rev_parse("--show-toplevel")
+}
+
 /// Parsed data from a git remote URL.
 #[derive(Debug, PartialEq)]
 pub struct GitRemoteData {

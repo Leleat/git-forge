@@ -222,6 +222,50 @@ pub fn get_pr_ref(pr_number: u32) -> String {
     format!("merge-requests/{pr_number}/head")
 }
 
+pub fn get_url_for_home(remote: &GitRemoteData) -> String {
+    build_web_base_url(remote)
+}
+
+pub fn get_url_for_commit(remote: &GitRemoteData, commit: &str) -> String {
+    format!("{}/-/commit/{}", build_web_base_url(remote), commit)
+}
+
+pub fn get_url_for_issue(remote: &GitRemoteData, issue_number: u32) -> String {
+    format!("{}/-/issues/{}", build_web_base_url(remote), issue_number)
+}
+
+pub fn get_url_for_issues(remote: &GitRemoteData) -> String {
+    format!("{}/-/issues", build_web_base_url(remote))
+}
+
+pub fn get_url_for_pr(remote: &GitRemoteData, pr_number: u32) -> String {
+    format!(
+        "{}/-/merge_requests/{}",
+        build_web_base_url(remote),
+        pr_number
+    )
+}
+
+pub fn get_url_for_prs(remote: &GitRemoteData) -> String {
+    format!("{}/-/merge_requests", build_web_base_url(remote))
+}
+
+pub fn get_url_for_path(
+    remote: &GitRemoteData,
+    path: &str,
+    commit: &str,
+    line_number: Option<u32>,
+) -> String {
+    let base = build_web_base_url(remote);
+    let mut url = format!("{base}/-/blob/{commit}/{path}");
+
+    if let Some(line) = line_number {
+        url.push_str(&format!("#L{}", line));
+    }
+
+    url
+}
+
 // =============================================================================
 // Private Helpers
 // =============================================================================
@@ -232,5 +276,15 @@ fn build_api_base_url(remote: &GitRemoteData) -> String {
     match port {
         Some(p) => format!("https://{host}:{p}/api/v4"),
         None => format!("https://{host}/api/v4"),
+    }
+}
+
+fn build_web_base_url(remote: &GitRemoteData) -> String {
+    let host = &remote.host;
+    let path = &remote.path;
+
+    match remote.port {
+        Some(port) => format!("https://{host}:{port}/{path}"),
+        None => format!("https://{host}/{path}"),
     }
 }

@@ -10,17 +10,22 @@ mod forge {
     pub use http_client::HttpClient;
 }
 
+mod browse;
 mod completions;
 mod issue;
 mod pr;
 
+pub use browse::browse_repository;
 pub use completions::generate_completions;
 pub use issue::{IssueCommand, list_issues};
 pub use pr::{PrCommand, checkout_pr, create_pr, list_prs};
 
 use clap::{Parser, Subcommand};
 
-use crate::cli::{completions::CompletionsCommandArgs, issue::IssueCommandArgs, pr::PrCommandArgs};
+use crate::cli::{
+    browse::BrowseCommandArgs, completions::CompletionsCommandArgs, issue::IssueCommandArgs,
+    pr::PrCommandArgs,
+};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -31,6 +36,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum GitForgeCommand {
+    /// Open repository links in your browser or print them to stdout
+    #[command(alias = "b")]
+    Browse(BrowseCommandArgs),
+
     /// Generate shell completions.
     #[command(alias = "c", about = "Generate shell completions")]
     Completions(CompletionsCommandArgs),
