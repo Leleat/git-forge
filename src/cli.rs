@@ -14,7 +14,7 @@ mod pr;
 mod web;
 
 pub use completions::generate_completions;
-pub use issue::list_issues;
+pub use issue::{IssueCommand, list_issues};
 pub use pr::{PrCommand, checkout_pr, create_pr, list_prs};
 pub use web::print_web_url;
 

@@ -39,7 +39,14 @@ describe.each([
 
     it("Should list issues using full 'issue' command", () => {
         const result = runGitForge({
-            args: ["issue", "--api", forge, "--api-url", getApiUrl(forge)],
+            args: [
+                "issue",
+                "list",
+                "--api",
+                forge,
+                "--api-url",
+                getApiUrl(forge),
+            ],
             cwd: tempDir,
         });
 
@@ -56,7 +63,7 @@ describe.each([
 
     it("Should list issues using 'i' alias", () => {
         const result = runGitForge({
-            args: ["i", "--api", forge, "--api-url", getApiUrl(forge)],
+            args: ["i", "list", "--api", forge, "--api-url", getApiUrl(forge)],
             cwd: tempDir,
         });
 
@@ -72,6 +79,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -90,6 +98,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--auth",
@@ -108,6 +117,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -131,6 +141,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -150,6 +161,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -171,6 +183,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -190,6 +203,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -209,6 +223,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -227,6 +242,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -246,6 +262,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -265,6 +282,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",
@@ -284,6 +302,7 @@ describe.each([
         const result = runGitForge({
             args: [
                 "issue",
+                "list",
                 "--api",
                 forge,
                 "--api-url",

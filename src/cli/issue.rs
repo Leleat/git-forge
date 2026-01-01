@@ -1,6 +1,6 @@
 //! The `issue` subcommand.
 
-use clap::Args;
+use clap::{Args, Subcommand};
 
 use crate::cli::forge::{self, ApiType};
 
@@ -13,6 +13,21 @@ const DEFAULT_PER_PAGE: u32 = 30;
 /// Command-line arguments for the `issue` subcommand.
 #[derive(Args)]
 pub struct IssueCommandArgs {
+    #[command(subcommand)]
+    pub subcommand: IssueCommand,
+}
+
+/// Available subcommands for issue subcommand.
+#[derive(Subcommand)]
+pub enum IssueCommand {
+    /// List issues as TSV.
+    #[command(alias = "l", about = "List issues as TSV")]
+    List(IssueListCommandArgs),
+}
+
+/// Command-line arguments for listing issues.
+#[derive(Args)]
+pub struct IssueListCommandArgs {
     #[arg(
         long,
         value_name = "TYPE",
@@ -119,7 +134,7 @@ pub struct Issue {
 // =============================================================================
 
 /// Lists issues from the remote repository's forge and outputs them as TSV.
-pub fn list_issues(args: IssueCommandArgs) -> anyhow::Result<()> {
+pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
     let forge_client = forge::create_forge_client(args.remote, args.api, args.api_url)?;
     let issues = forge_client.get_issues(
         args.auth,
