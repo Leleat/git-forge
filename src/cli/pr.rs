@@ -28,7 +28,8 @@ pub enum PrCommand {
     #[command(alias = "co")]
     Checkout(PrCheckoutCommandArgs),
 
-    /// Create a new pull request from the current branch.
+    /// Create a new pull request from the current branch and open the pull
+    /// request in the web browser.
     #[command(alias = "cr")]
     Create(PrCreateCommandArgs),
 
@@ -75,6 +76,10 @@ pub struct PrCreateCommandArgs {
     /// Create as draft PR
     #[arg(long)]
     pub draft: bool,
+
+    /// Don't open the issue in the browser after creation
+    #[arg(short, long)]
+    pub no_browser: bool,
 
     /// Push branch to remote
     #[arg(long, default_value = "true", action = ArgAction::Set)]
@@ -342,7 +347,11 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
         &create_options,
     )?;
 
-    println!("PR created at {}", pr.url);
+    if args.no_browser {
+        println!("PR created at {}", pr.url);
+    } else {
+        open::that(pr.url)?;
+    }
 
     Ok(())
 }

@@ -49,6 +49,7 @@ describe.each([
             args: [
                 "pr",
                 "create",
+                "--no-browser",
                 "--api",
                 forge,
                 "--api-url",
@@ -69,6 +70,7 @@ describe.each([
             args: [
                 "pr",
                 "create",
+                "--no-browser",
                 "--api",
                 forge,
                 "--api-url",
@@ -91,6 +93,7 @@ describe.each([
             args: [
                 "pr",
                 "create",
+                "--no-browser",
                 "--api",
                 forge,
                 "--api-url",
@@ -113,6 +116,7 @@ describe.each([
             args: [
                 "pr",
                 "create",
+                "--no-browser",
                 "--api",
                 forge,
                 "--api-url",
@@ -142,6 +146,7 @@ describe.each([
             args: [
                 "pr",
                 "create",
+                "--no-browser",
                 "--api",
                 forge,
                 "--api-url",
@@ -164,6 +169,7 @@ describe.each([
             args: [
                 "pr",
                 "create",
+                "--no-browser",
                 "--api",
                 forge,
                 "--api-url",
@@ -184,7 +190,13 @@ describe.each([
 
     it("Should fail if no token is set", () => {
         const result = runGitForge({
-            args: ["pr", "create", "--api-url", getApiUrl(forge)],
+            args: [
+                "pr",
+                "create",
+                "--no-browser",
+                "--api-url",
+                getApiUrl(forge),
+            ],
             cwd: localRepoDir,
             throwsError: true,
         });
@@ -197,6 +209,7 @@ describe.each([
             args: [
                 "pr",
                 "create",
+                "--no-browser",
                 "--api",
                 forge,
                 "--api-url",
