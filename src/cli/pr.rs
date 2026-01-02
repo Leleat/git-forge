@@ -25,141 +25,119 @@ pub struct PrCommandArgs {
 #[derive(Subcommand)]
 pub enum PrCommand {
     /// Checkout a pull request locally.
-    #[command(alias = "co", about = "Checkout a pull request locally")]
+    #[command(alias = "co")]
     Checkout(PrCheckoutCommandArgs),
 
     /// Create a new pull request from the current branch.
-    #[command(
-        alias = "cr",
-        about = "Create a new pull request from the current branch"
-    )]
+    #[command(alias = "cr")]
     Create(PrCreateCommandArgs),
 
     /// List pull requests as TSV.
-    #[command(alias = "l", about = "List pull requests as TSV")]
+    #[command(alias = "l")]
     List(PrListCommandArgs),
 }
 
 /// Command-line arguments for checking out a pull request.
 #[derive(Args)]
 pub struct PrCheckoutCommandArgs {
-    #[arg(
-        long,
-        value_name = "TYPE",
-        help = "Specify the forge which affects the API schema etc."
-    )]
+    /// Specify the forge which affects the API schema etc
+    #[arg(long, value_name = "TYPE")]
     pub api: Option<ApiType>,
 
-    #[arg(
-        long,
-        help = "Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection"
-    )]
+    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4)
+    /// instead of relying on the auto-detection
+    #[arg(long)]
     pub api_url: Option<String>,
 
-    #[arg(help = "PR number to checkout")]
+    /// PR number to checkout
     pub number: u32,
 
-    #[arg(long, default_value = "origin", help = "Git remote to use")]
+    /// Git remote to use
+    #[arg(long, default_value = "origin")]
     pub remote: String,
 }
 
 /// Command-line arguments for creating a new pull request.
 #[derive(Args)]
 pub struct PrCreateCommandArgs {
-    #[arg(
-        long,
-        value_name = "TYPE",
-        help = "Specify the forge which affects the API schema etc."
-    )]
+    /// Specify the forge which affects the API schema etc
+    #[arg(long, value_name = "TYPE")]
     pub api: Option<ApiType>,
 
-    #[arg(
-        long,
-        help = "Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection"
-    )]
+    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection
+    #[arg(long)]
     pub api_url: Option<String>,
 
-    #[arg(long, help = "PR description")]
+    // PR description
+    #[arg(long)]
     pub body: Option<String>,
 
-    #[arg(long, help = "Create as draft PR")]
+    /// Create as draft PR
+    #[arg(long)]
     pub draft: bool,
 
-    #[arg(long, default_value = "true", action = ArgAction::Set, help = "Push branch to remote")]
+    /// Push branch to remote
+    #[arg(long, default_value = "true", action = ArgAction::Set)]
     pub push: bool,
 
-    #[arg(long, default_value = "origin", help = "Git remote to use")]
+    /// Git remote to use
+    #[arg(long, default_value = "origin")]
     pub remote: String,
 
-    #[arg(long, help = "Target branch")]
+    /// Target branch
+    #[arg(long)]
     pub target: Option<String>,
 
-    #[arg(long, help = "PR title")]
+    /// PR title
+    #[arg(long)]
     pub title: Option<String>,
 }
 
 /// Command-line arguments for listing pull requests.
 #[derive(Args)]
 pub struct PrListCommandArgs {
-    #[arg(
-        long,
-        value_name = "TYPE",
-        help = "Specify the forge which affects the API schema etc."
-    )]
+    /// Specify the forge which affects the API schema etc
+    #[arg(long, value_name = "TYPE")]
     pub api: Option<ApiType>,
 
-    #[arg(
-        long,
-        help = "Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection"
-    )]
+    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection
+    #[arg(long)]
     pub api_url: Option<String>,
 
-    #[arg(
-        long,
-        help = "Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)"
-    )]
+    /// Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
+    #[arg(long)]
     pub auth: bool,
 
-    #[arg(long, help = "Filter by author username")]
+    /// Filter by author username
+    #[arg(long)]
     pub author: Option<String>,
 
-    #[arg(
-        long,
-        value_delimiter = ',',
-        help = "Columns to include in TSV output (comma-separated)"
-    )]
+    /// Columns to include in TSV output (comma-separated)
+    #[arg(long, value_delimiter = ',')]
     pub columns: Vec<String>,
 
-    #[arg(long, help = "Filter to only draft PRs")]
+    /// Filter to only draft PRs
+    #[arg(long)]
     pub draft: bool,
 
-    #[arg(
-        long,
-        value_delimiter = ',',
-        help = "Filter by labels (comma-separated)"
-    )]
+    /// Filter by labels (comma-separated)
+    #[arg(long, value_delimiter = ',')]
     pub labels: Vec<String>,
 
-    #[arg(
-        long,
-        default_value_t = 1,
-        value_name = "NUMBER",
-        help = "Page number to fetch"
-    )]
+    /// Page number to fetch
+    #[arg(long, default_value_t = 1, value_name = "NUMBER")]
     pub page: u32,
 
-    #[arg(
-        long,
-        default_value_t = DEFAULT_PER_PAGE,
-        value_name = "NUMBER",
-        help = "Number of PRs per page"
-    )]
+    /// Number of PRs per page
+    #[arg( long, default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
     pub per_page: u32,
 
-    #[arg(long, default_value = "origin", help = "Git remote to use")]
+    /// Git remote to use
+    #[arg(long, default_value = "origin")]
     pub remote: String,
 
-    #[arg(long, help = "Filter by state")]
+    /// Filter by state
+    #[arg(long)]
     pub state: Option<PrState>,
 }
 

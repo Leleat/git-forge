@@ -25,69 +25,50 @@ pub struct IssueCommandArgs {
 #[derive(Subcommand)]
 pub enum IssueCommand {
     /// List issues as TSV.
-    #[command(alias = "l", about = "List issues as TSV")]
+    #[command(alias = "l")]
     List(IssueListCommandArgs),
 }
 
 /// Command-line arguments for listing issues.
 #[derive(Args)]
 pub struct IssueListCommandArgs {
-    #[arg(
-        long,
-        value_name = "TYPE",
-        help = "Specify the forge which affects the API schema etc."
-    )]
+    /// Specify the forge which affects the API schema etc
+    #[arg(long, value_name = "TYPE")]
     pub api: Option<ApiType>,
 
-    #[arg(
-        long,
-        help = "Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection"
-    )]
+    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection
+    #[arg(long)]
     pub api_url: Option<String>,
 
-    #[arg(
-        long,
-        help = "Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)"
-    )]
+    /// Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
+    #[arg(long)]
     pub auth: bool,
 
     #[arg(long, help = "Filter by author username")]
     pub author: Option<String>,
 
-    #[arg(
-        long,
-        value_delimiter = ',',
-        help = "Columns to include in TSV output (comma-separated)"
-    )]
+    /// Columns to include in TSV output (comma-separated)
+    #[arg(long, value_delimiter = ',')]
     pub columns: Vec<String>,
 
-    #[arg(
-        long,
-        value_delimiter = ',',
-        help = "Filter by labels (comma-separated)"
-    )]
+    /// Filter by labels (comma-separated)
+    #[arg(long, value_delimiter = ',')]
     pub labels: Vec<String>,
 
-    #[arg(
-        long,
-        default_value_t = 1,
-        value_name = "NUMBER",
-        help = "Page number to fetch"
-    )]
+    /// Page number to fetch
+    #[arg(long, default_value_t = 1, value_name = "NUMBER")]
     pub page: u32,
 
-    #[arg(
-        long,
-        default_value_t = DEFAULT_PER_PAGE,
-        value_name = "NUMBER",
-        help = "Number of issues per page"
-    )]
+    /// Number of issues per page
+    #[arg(long, default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
     pub per_page: u32,
 
-    #[arg(long, default_value = "origin", help = "Git remote to use")]
+    /// Git remote to use
+    #[arg(long, default_value = "origin")]
     pub remote: String,
 
-    #[arg(long, help = "Filter by state")]
+    /// Filter by state
+    #[arg(long)]
     pub state: Option<IssueState>,
 }
 
