@@ -38,42 +38,42 @@ pub enum IssueCommand {
 pub struct IssueListCommandArgs {
     /// Specify the forge which affects the API schema etc
     #[arg(long, value_name = "TYPE")]
-    pub api: Option<ApiType>,
+    api: Option<ApiType>,
 
     /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection
     #[arg(long)]
-    pub api_url: Option<String>,
+    api_url: Option<String>,
 
     /// Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
     #[arg(long)]
-    pub auth: bool,
+    auth: bool,
 
     #[arg(long, help = "Filter by author username")]
-    pub author: Option<String>,
+    author: Option<String>,
 
     /// Columns to include in TSV output (comma-separated)
     #[arg(long, value_delimiter = ',')]
-    pub columns: Vec<String>,
+    columns: Vec<String>,
 
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
-    pub labels: Vec<String>,
+    labels: Vec<String>,
 
     /// Page number to fetch
     #[arg(long, default_value_t = 1, value_name = "NUMBER")]
-    pub page: u32,
+    page: u32,
 
     /// Number of issues per page
     #[arg(long, short_alias = 'l', alias = "limit", default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
-    pub per_page: u32,
+    per_page: u32,
 
     /// Git remote to use
     #[arg(long, default_value = "origin")]
-    pub remote: String,
+    remote: String,
 
     /// Filter by state
     #[arg(long)]
-    pub state: Option<IssueState>,
+    state: Option<IssueState>,
 }
 
 /// Command-line arguments for creating an issue.
@@ -81,32 +81,32 @@ pub struct IssueListCommandArgs {
 pub struct IssueCreateCommandArgs {
     /// Specify the forge which affects the API schema etc.
     #[arg(long, value_name = "TYPE")]
-    pub api: Option<ApiType>,
+    api: Option<ApiType>,
 
     /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4)
     /// instead of relying on the auto-detection
     #[arg(long)]
-    pub api_url: Option<String>,
+    api_url: Option<String>,
 
     /// Issue description
     #[arg(short, long)]
-    pub body: Option<String>,
+    body: Option<String>,
 
     /// Don't open the issue in the browser after creation
     #[arg(short, long)]
-    pub no_browser: bool,
+    no_browser: bool,
 
     /// Git remote to use
     #[arg(long, default_value = "origin")]
-    pub remote: String,
+    remote: String,
 
     /// Issue title
     #[arg(short, long)]
-    pub title: Option<String>,
+    title: Option<String>,
 
     /// Create an issue in the web browser
     #[arg(short, long)]
-    pub web: bool,
+    web: bool,
 }
 
 // =============================================================================
