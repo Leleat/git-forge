@@ -73,7 +73,7 @@ describe.each([
 
     it("Should list pull requests using the 'p l' alias", () => {
         const result = runGitForge({
-            args: ["p", "l", "--api", forge, "--api-url", getApiUrl(forge)],
+            args: ["p", "ls", "--api", forge, "--api-url", getApiUrl(forge)],
             cwd: tempDir,
         });
 

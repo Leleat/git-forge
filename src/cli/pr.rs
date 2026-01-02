@@ -34,7 +34,7 @@ pub enum PrCommand {
     Create(PrCreateCommandArgs),
 
     /// List pull requests as TSV.
-    #[command(alias = "l")]
+    #[command(alias = "ls")]
     List(PrListCommandArgs),
 }
 
@@ -134,7 +134,7 @@ pub struct PrListCommandArgs {
     pub page: u32,
 
     /// Number of PRs per page
-    #[arg( long, default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
+    #[arg(long, short_alias = 'l', alias = "limit", default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
     pub per_page: u32,
 
     /// Git remote to use

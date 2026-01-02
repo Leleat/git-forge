@@ -25,7 +25,7 @@ pub struct IssueCommandArgs {
 #[derive(Subcommand)]
 pub enum IssueCommand {
     /// List issues as TSV.
-    #[command(alias = "l")]
+    #[command(alias = "ls")]
     List(IssueListCommandArgs),
 
     /// Create an issue and open it in the web browser.
@@ -64,7 +64,7 @@ pub struct IssueListCommandArgs {
     pub page: u32,
 
     /// Number of issues per page
-    #[arg(long, default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
+    #[arg(long, short_alias = 'l', alias = "limit", default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
     pub per_page: u32,
 
     /// Git remote to use
