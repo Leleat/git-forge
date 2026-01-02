@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 
 use crate::{
     cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
-    git,
+    git::{self, GitRemoteData},
 };
 
 // =============================================================================
@@ -27,6 +27,10 @@ pub enum IssueCommand {
     /// List issues as TSV.
     #[command(alias = "l")]
     List(IssueListCommandArgs),
+
+    /// Create an issue and open it in the web browser.
+    #[command(alias = "cr")]
+    Create(IssueCreateCommandArgs),
 }
 
 /// Command-line arguments for listing issues.
@@ -70,6 +74,39 @@ pub struct IssueListCommandArgs {
     /// Filter by state
     #[arg(long)]
     pub state: Option<IssueState>,
+}
+
+/// Command-line arguments for creating an issue.
+#[derive(Args)]
+pub struct IssueCreateCommandArgs {
+    /// Specify the forge which affects the API schema etc.
+    #[arg(long, value_name = "TYPE")]
+    pub api: Option<ApiType>,
+
+    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4)
+    /// instead of relying on the auto-detection
+    #[arg(long)]
+    pub api_url: Option<String>,
+
+    /// Issue description
+    #[arg(short, long)]
+    pub body: Option<String>,
+
+    /// Don't open the issue in the browser after creation
+    #[arg(short, long)]
+    pub no_browser: bool,
+
+    /// Git remote to use
+    #[arg(long, default_value = "origin")]
+    pub remote: String,
+
+    /// Issue title
+    #[arg(short, long)]
+    pub title: Option<String>,
+
+    /// Create an issue in the web browser
+    #[arg(short, long)]
+    pub web: bool,
 }
 
 // =============================================================================
@@ -120,6 +157,11 @@ pub struct ListIssueFilters<'a> {
     pub page: u32,
     pub per_page: u32,
     pub state: &'a IssueState,
+}
+
+pub struct CreateIssueOptions<'a> {
+    pub title: &'a str,
+    pub body: Option<&'a str>,
 }
 
 // =============================================================================
@@ -173,9 +215,74 @@ pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn create_issue(args: IssueCreateCommandArgs) -> anyhow::Result<()> {
+    let remote = git::get_remote_data(&args.remote)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
+    let api_type = match args.api {
+        Some(api_type) => api_type,
+        None => forge::guess_api_type_from_host(&remote.host)
+            .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
+    };
+
+    if args.web {
+        create_issue_via_browser(&remote, &api_type)
+    } else {
+        let Some(title) = args.title else {
+            anyhow::bail!("--title is required when creating an issue with the CLI");
+        };
+
+        create_issue_via_api(
+            &remote,
+            &api_type,
+            args.api_url.as_deref(),
+            &CreateIssueOptions {
+                title: &title,
+                body: args.body.as_deref(),
+            },
+            args.no_browser,
+        )
+    }
+}
+
 // =============================================================================
 // Private Helpers
 // =============================================================================
+
+fn create_issue_via_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
+    let url = match api_type {
+        ApiType::GitHub => github::get_url_for_issue_creation(remote),
+        ApiType::GitLab => gitlab::get_url_for_issue_creation(remote),
+        ApiType::Gitea | ApiType::Forgejo => gitea::get_url_for_issue_creation(remote),
+    };
+
+    open::that(url)?;
+
+    Ok(())
+}
+
+fn create_issue_via_api(
+    remote: &GitRemoteData,
+    api_type: &ApiType,
+    api_url: Option<&str>,
+    create_options: &CreateIssueOptions,
+    no_browser: bool,
+) -> anyhow::Result<()> {
+    let http_client = HttpClient::new();
+    let create_issue = match api_type {
+        ApiType::GitHub => github::create_issue,
+        ApiType::GitLab => gitlab::create_issue,
+        ApiType::Gitea | ApiType::Forgejo => gitea::create_issue,
+    };
+    let issue = create_issue(&http_client, remote, api_url, create_options)?;
+
+    if no_browser {
+        println!("Issue created at {}", issue.url);
+    } else {
+        open::that(&issue.url)?;
+    }
+
+    Ok(())
+}
 
 fn format_issues_to_tsv(issues: &[Issue], columns: Vec<String>) -> String {
     issues

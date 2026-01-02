@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 
+import { GITHUB_PORT } from "../utils.js";
 import issues from "./data/github/issue.json";
 import prs from "./data/github/pr.json";
 
@@ -41,6 +42,11 @@ interface CreatePrRequest {
     base: string;
     body?: string;
     draft?: boolean;
+}
+
+interface CreateIssueRequest {
+    title: string;
+    body?: string;
 }
 
 export function createGitHubServer(): express.Express {
@@ -122,6 +128,7 @@ export function createGitHubServer(): express.Express {
     );
 
     let prNumber = 1;
+    let issueNumber = 1;
 
     // Create pull request endpoint
     app.post(
@@ -150,7 +157,7 @@ export function createGitHubServer(): express.Express {
                 state: "open",
                 labels: [],
                 user: { login: "test-user" },
-                html_url: `http://localhost:3001/${owner}/${repo}/pull/${prNumber}`,
+                html_url: `http://localhost:${GITHUB_PORT}/${owner}/${repo}/pull/${prNumber}`,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
                 head: { ref: body.head },
@@ -162,6 +169,42 @@ export function createGitHubServer(): express.Express {
             prNumber++;
 
             res.status(201).json(newPr);
+        },
+    );
+
+    // Create issue endpoint
+    app.post(
+        "/api/v3/repos/:owner/:repo/issues",
+        (req: Request, res: Response) => {
+            const authHeader = req.headers.authorization;
+
+            if (!authHeader || !authHeader.startsWith("Bearer ")) {
+                res.sendStatus(403);
+
+                return;
+            }
+
+            const { owner, repo } = req.params;
+            const body = req.body as CreateIssueRequest;
+
+            if (!body.title) {
+                res.sendStatus(422);
+
+                return;
+            }
+
+            const newIssue: Issue = {
+                number: issueNumber,
+                title: body.title,
+                state: "open",
+                labels: [],
+                user: { login: "test-user" },
+                html_url: `http://localhost:${GITHUB_PORT}/${owner}/${repo}/issues/${issueNumber}`,
+            };
+
+            issueNumber++;
+
+            res.status(201).json(newIssue);
         },
     );
 

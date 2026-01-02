@@ -4,7 +4,7 @@ use serde::Deserialize;
 use crate::{
     cli::{
         forge::http_client::{HttpClient, WithAuth},
-        issue::{Issue, IssueState, ListIssueFilters},
+        issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
     git::GitRemoteData,
@@ -122,7 +122,7 @@ pub fn get_issues(
     let mut request = http_client
         .get(&url)
         .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
-        .header("Accept", "application/vnd.github.v3+json")
+        .header("Accept", "application/vnd.github+json")
         .query(&[("state", filters.state)])
         .query(&[("page", filters.page)])
         .query(&[("per_page", filters.per_page)]);
@@ -148,6 +148,35 @@ pub fn get_issues(
         .collect::<Vec<Issue>>();
 
     Ok(issues)
+}
+
+pub fn create_issue(
+    http_client: &HttpClient,
+    remote: &GitRemoteData,
+    api_url: Option<&str>,
+    options: &CreateIssueOptions,
+) -> anyhow::Result<Issue> {
+    let base_url = match api_url {
+        Some(url) => url,
+        None => &build_api_base_url(remote),
+    };
+    let repo_path = &remote.path;
+    let url = format!("{base_url}/repos/{repo_path}/issues");
+    let request_body = serde_json::json!({
+        "title": options.title,
+        "body": options.body.unwrap_or_default(),
+    });
+    let issue: GitHubIssue = http_client
+        .post(&url)
+        .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
+        .header("Accept", "application/vnd.github+json")
+        .json(&request_body)
+        .send()
+        .context("Failed to create issue on GitHub")?
+        .json()
+        .context("Failed to parse GitHub API response")?;
+
+    Ok(issue.into())
 }
 
 pub fn get_prs(
@@ -227,7 +256,7 @@ pub fn create_pr(
     let pr: GitHubPullRequest = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
-        .header("Accept", "application/vnd.github.v3+json")
+        .header("Accept", "application/vnd.github+json")
         .json(&request_body)
         .send()
         .context("Failed to create pull request on GitHub")?
@@ -255,6 +284,10 @@ pub fn get_url_for_issue(remote: &GitRemoteData, issue_number: u32) -> String {
 
 pub fn get_url_for_issues(remote: &GitRemoteData) -> String {
     format!("{}/issues", build_web_base_url(remote))
+}
+
+pub fn get_url_for_issue_creation(remote: &GitRemoteData) -> String {
+    format!("{}/issues/new", build_web_base_url(remote))
 }
 
 pub fn get_url_for_pr(remote: &GitRemoteData, pr_number: u32) -> String {

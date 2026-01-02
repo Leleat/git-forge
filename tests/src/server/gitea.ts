@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 
+import { GITEA_PORT } from "../utils.js";
 import issues from "./data/gitea/issue.json";
 import prs from "./data/gitea/pr.json";
 
@@ -39,6 +40,11 @@ interface CreatePrRequest {
     title: string;
     head: string;
     base: string;
+    body?: string;
+}
+
+interface CreateIssueRequest {
+    title: string;
     body?: string;
 }
 
@@ -121,6 +127,7 @@ export function createGiteaServer(): express.Express {
     );
 
     let prNumber = 0;
+    let issueNumber = 0;
 
     // Create pull request endpoint
     app.post(
@@ -149,7 +156,7 @@ export function createGiteaServer(): express.Express {
                 state: "open",
                 labels: [],
                 user: { login: "test-user" },
-                html_url: `http://localhost:3003/${owner}/${repo}/pulls/${prNumber}`,
+                html_url: `http://localhost:${GITEA_PORT}/${owner}/${repo}/pulls/${prNumber}`,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
                 head: { ref: body.head },
@@ -161,6 +168,42 @@ export function createGiteaServer(): express.Express {
             prNumber++;
 
             res.status(201).json(newPr);
+        },
+    );
+
+    // Create issue endpoint
+    app.post(
+        "/api/v1/repos/:owner/:repo/issues",
+        (req: Request, res: Response) => {
+            const authHeader = req.headers.authorization;
+
+            if (!authHeader || !authHeader.startsWith("token ")) {
+                res.sendStatus(403);
+
+                return;
+            }
+
+            const { owner, repo } = req.params;
+            const body = req.body as CreateIssueRequest;
+
+            if (!body.title) {
+                res.sendStatus(422);
+
+                return;
+            }
+
+            const newIssue: Issue = {
+                number: issueNumber,
+                title: body.title,
+                state: "open",
+                labels: [],
+                user: { login: "test-user" },
+                html_url: `http://localhost:${GITEA_PORT}/${owner}/${repo}/issues/${issueNumber}`,
+            };
+
+            issueNumber++;
+
+            res.status(201).json(newIssue);
         },
     );
 

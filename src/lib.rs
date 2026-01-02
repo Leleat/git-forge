@@ -13,6 +13,7 @@ pub fn run() -> anyhow::Result<()> {
         GitForgeCommand::Completions(args) => cli::generate_completions(args),
         GitForgeCommand::Issue(args) => match args.subcommand {
             IssueCommand::List(args) => cli::list_issues(args),
+            IssueCommand::Create(args) => cli::create_issue(args),
         },
         GitForgeCommand::Pr(args) => match args.subcommand {
             PrCommand::Checkout(args) => cli::checkout_pr(args),

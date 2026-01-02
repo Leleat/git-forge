@@ -13,7 +13,7 @@ describe.each([
     { forge: "github", token: "GITHUB_TOKEN" } as const,
     { forge: "gitea", token: "GITEA_TOKEN" } as const,
     { forge: "gitlab", token: "GITLAB_TOKEN" } as const,
-])("Issue Command ($forge)", ({ forge, token }) => {
+])("Issue List Command ($forge)", ({ forge, token }) => {
     let tempDir: string;
 
     beforeEach(() => {

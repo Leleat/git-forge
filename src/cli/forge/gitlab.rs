@@ -4,7 +4,7 @@ use url::form_urlencoded::byte_serialize;
 use crate::{
     cli::{
         forge::http_client::{HttpClient, WithAuth},
-        issue::{Issue, IssueState, ListIssueFilters},
+        issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
     git::GitRemoteData,
@@ -142,6 +142,35 @@ pub fn get_issues(
     Ok(issues)
 }
 
+pub fn create_issue(
+    http_client: &HttpClient,
+    remote: &GitRemoteData,
+    api_url: Option<&str>,
+    options: &CreateIssueOptions,
+) -> anyhow::Result<Issue> {
+    let base_url = match api_url {
+        Some(url) => url,
+        None => &build_api_base_url(remote),
+    };
+    let encoded_path = byte_serialize(remote.path.as_bytes()).collect::<String>();
+    let url = format!("{base_url}/projects/{encoded_path}/issues");
+    let request_body = serde_json::json!({
+        "title": options.title,
+        "description": options.body.unwrap_or_default(),
+    });
+
+    let issue: GitLabIssue = http_client
+        .post(&url)
+        .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
+        .json(&request_body)
+        .send()
+        .context("Failed to create issue on GitLab")?
+        .json()
+        .context("Failed to parse GitLab API response")?;
+
+    Ok(issue.into())
+}
+
 pub fn get_prs(
     http_client: &HttpClient,
     remote: &GitRemoteData,
@@ -236,6 +265,10 @@ pub fn get_url_for_issue(remote: &GitRemoteData, issue_number: u32) -> String {
 
 pub fn get_url_for_issues(remote: &GitRemoteData) -> String {
     format!("{}/-/issues", build_web_base_url(remote))
+}
+
+pub fn get_url_for_issue_creation(remote: &GitRemoteData) -> String {
+    format!("{}/-/issues/new", build_web_base_url(remote))
 }
 
 pub fn get_url_for_pr(remote: &GitRemoteData, pr_number: u32) -> String {
