@@ -26,7 +26,7 @@ Note that due to differing forge APIs, some behavior may vary across forges. E.g
 # git aliases in .gitconfig
 [alias]
     # Search for and copy an issue link to clipboard. `copy` is a custom script
-    fcpissue = "!git forge issue | fzf | cut -f 3 | copy"
+    fcpissue = "!git forge issue list | fzf | cut -f 3 | copy"
     # Search for a PR and check it out locally
     freviewpr = "!git forge pr list | fzf | cut -f 1 | xargs git forge pr checkout"
 ```
