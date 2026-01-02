@@ -219,7 +219,7 @@ pub struct CreatePrOptions<'a> {
     pub title: &'a str,
     pub source_branch: &'a str,
     pub target_branch: &'a str,
-    pub body: Option<&'a str>,
+    pub body: &'a str,
     pub draft: bool,
 }
 
@@ -327,7 +327,7 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
         title: &args.title.unwrap_or_else(|| current_branch.clone()),
         source_branch: &current_branch,
         target_branch: &target_branch,
-        body: args.body.as_deref(),
+        body: &args.body.unwrap_or_default(),
         draft: args.draft,
     };
     let pr = create_pr(

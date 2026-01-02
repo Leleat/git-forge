@@ -172,7 +172,7 @@ pub struct ListIssueFilters<'a> {
 
 pub struct CreateIssueOptions<'a> {
     pub title: &'a str,
-    pub body: Option<&'a str>,
+    pub body: &'a str,
 }
 
 // =============================================================================
@@ -233,7 +233,7 @@ pub fn create_issue(args: IssueCreateCommandArgs) -> anyhow::Result<()> {
             args.api_url.as_deref(),
             &CreateIssueOptions {
                 title: &title,
-                body: args.body.as_deref(),
+                body: &args.body.unwrap_or_default(),
             },
             args.no_browser,
         )

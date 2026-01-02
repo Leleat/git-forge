@@ -168,7 +168,7 @@ pub fn create_issue(
     let url = format!("{base_url}/repos/{repo_path}/issues");
     let request_body = serde_json::json!({
         "title": options.title,
-        "body": options.body.unwrap_or_default(),
+        "body": options.body,
     });
     let issue: GitHubIssue = http_client
         .post(&url)
@@ -253,7 +253,7 @@ pub fn create_pr(
         "title": options.title,
         "head": options.source_branch,
         "base": options.target_branch,
-        "body": options.body.unwrap_or_default(),
+        "body": options.body,
         "draft": options.draft,
     });
 

@@ -160,7 +160,7 @@ pub fn create_issue(
     let url = format!("{base_url}/projects/{encoded_path}/issues");
     let request_body = serde_json::json!({
         "title": options.title,
-        "description": options.body.unwrap_or_default(),
+        "description": options.body,
     });
 
     let issue: GitLabIssue = http_client
@@ -236,7 +236,7 @@ pub fn create_pr(
         "source_branch": options.source_branch,
         "target_branch": options.target_branch,
         "title": if options.draft { format!("Draft: {}", options.title) } else { options.title.to_string() },
-        "description": options.body.unwrap_or_default(),
+        "description": options.body,
     });
 
     let mr: GitLabMergeRequest = http_client
