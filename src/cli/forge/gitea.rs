@@ -9,7 +9,7 @@ use crate::{
     git::GitRemoteData,
 };
 
-const AUTH_TOKEN: &str = "GITEA_TOKEN";
+const AUTH_TOKEN: &str = "GIT_FORGE_GITEA_TOKEN";
 const AUTH_SCHEME: &str = "token";
 
 // =============================================================================

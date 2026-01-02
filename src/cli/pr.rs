@@ -105,11 +105,13 @@ pub struct PrListCommandArgs {
     #[arg(long, value_name = "TYPE")]
     api: Option<ApiType>,
 
-    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection
+    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4)
+    /// instead of relying on the auto-detection
     #[arg(long)]
     api_url: Option<String>,
 
-    /// Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
+    /// Use authentication with environment variables (GIT_FORGE_GITHUB_TOKEN,
+    /// GIT_FORGE_GITLAB_TOKEN, GIT_FORGE_GITEA_TOKEN)
     #[arg(long)]
     auth: bool,
 

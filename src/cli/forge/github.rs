@@ -10,7 +10,7 @@ use crate::{
     git::GitRemoteData,
 };
 
-const AUTH_TOKEN: &str = "GITHUB_TOKEN";
+const AUTH_TOKEN: &str = "GIT_FORGE_GITHUB_TOKEN";
 const AUTH_SCHEME: &str = "Bearer";
 
 // =============================================================================
