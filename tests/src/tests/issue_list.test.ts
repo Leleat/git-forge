@@ -238,6 +238,26 @@ describe.each([
         expect(result.exitCode).not.toBe(0);
     });
 
+    it("Should list issues filtered by assignee (bob)", () => {
+        const result = runGitForge({
+            args: [
+                "issue",
+                "list",
+                "--api",
+                forge,
+                "--api-url",
+                getApiUrl(forge),
+                "--assignee",
+                "bob",
+            ],
+            cwd: tempDir,
+        });
+
+        expect(result.exitCode).toBe(0);
+        expectTsvFormat(result.stdout);
+        expect(parseTSV(result.stdout)).toHaveLength(3);
+    });
+
     it("Should list issues filtered by author (alice)", () => {
         const result = runGitForge({
             args: [

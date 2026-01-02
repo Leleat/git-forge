@@ -50,7 +50,11 @@ pub struct IssueListCommandArgs {
     #[arg(long)]
     auth: bool,
 
-    #[arg(long, help = "Filter by author username")]
+    /// Filter by assignee
+    #[arg(long, value_name = "USERNAME")]
+    assignee: Option<String>,
+
+    #[arg(long, value_name = "USERNAME", help = "Filter by author")]
     author: Option<String>,
 
     /// Columns to include in TSV output (comma-separated)
@@ -158,6 +162,7 @@ pub struct Issue {
 }
 
 pub struct ListIssueFilters<'a> {
+    pub assignee: Option<&'a str>,
     pub author: Option<&'a str>,
     pub labels: &'a [String],
     pub page: u32,
@@ -193,6 +198,7 @@ pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
             &api_type,
             args.api_url.as_deref(),
             &ListIssueFilters {
+                assignee: args.assignee.as_deref(),
                 author: args.author.as_deref(),
                 labels: &args.labels,
                 page: args.page,

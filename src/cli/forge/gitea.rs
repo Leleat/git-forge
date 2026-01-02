@@ -126,6 +126,10 @@ pub fn get_issues(
         .query(&[("limit", filters.per_page)])
         .query(&[("type", "issues")]);
 
+    if let Some(assignee) = filters.assignee {
+        request = request.query(&[("assigned_by", assignee)]);
+    }
+
     if let Some(author) = filters.author {
         request = request.query(&[("created_by", author)]);
     }

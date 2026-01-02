@@ -7,6 +7,9 @@
     "user": {
       "login": "alice"
     },
+    "assignee": {
+      "login": "bob"
+    },
     "html_url": "http://localhost:3003/user/repo/issues/1",
     "pull_request": null
   },
@@ -17,6 +20,9 @@
     "labels": [{ "name": "bug" }, { "name": "critical" }],
     "user": {
       "login": "bob"
+    },
+    "assignee": {
+      "login": "alice"
     },
     "html_url": "http://localhost:3003/user/repo/issues/2",
     "pull_request": null
@@ -29,6 +35,9 @@
     "user": {
       "login": "alice"
     },
+    "assignee": {
+      "login": "charlie"
+    },
     "html_url": "http://localhost:3003/user/repo/issues/3",
     "pull_request": null
   },
@@ -39,6 +48,9 @@
     "labels": [{ "name": "enhancement" }, { "name": "performance" }],
     "user": {
       "login": "charlie"
+    },
+    "assignee": {
+      "login": "bob"
     },
     "html_url": "http://localhost:3003/user/repo/issues/4",
     "pull_request": null
@@ -51,6 +63,7 @@
     "user": {
       "login": "alice"
     },
+    "assignee": null,
     "html_url": "http://localhost:3003/user/repo/issues/5",
     "pull_request": null
   },
@@ -61,6 +74,9 @@
     "labels": [{ "name": "bug" }, { "name": "memory" }],
     "user": {
       "login": "bob"
+    },
+    "assignee": {
+      "login": "alice"
     },
     "html_url": "http://localhost:3003/user/repo/issues/6",
     "pull_request": null
@@ -73,6 +89,7 @@
     "user": {
       "login": "charlie"
     },
+    "assignee": null,
     "html_url": "http://localhost:3003/user/repo/issues/7",
     "pull_request": null
   },
@@ -83,6 +100,9 @@
     "labels": [{ "name": "refactor" }, { "name": "database" }],
     "user": {
       "login": "alice"
+    },
+    "assignee": {
+      "login": "bob"
     },
     "html_url": "http://localhost:3003/user/repo/issues/8",
     "pull_request": null
@@ -95,6 +115,7 @@
     "user": {
       "login": "bob"
     },
+    "assignee": null,
     "html_url": "http://localhost:3003/user/repo/issues/9",
     "pull_request": null
   },
@@ -105,6 +126,9 @@
     "labels": [{ "name": "testing" }],
     "user": {
       "login": "charlie"
+    },
+    "assignee": {
+      "login": "alice"
     },
     "html_url": "http://localhost:3003/user/repo/issues/10",
     "pull_request": null
