@@ -12,7 +12,7 @@ use crate::cli::Cli;
 #[derive(Debug, Args)]
 pub struct CompletionsCommandArgs {
     /// The shell to generate completions for
-    pub shell: Shell,
+    shell: Shell,
 }
 
 // =============================================================================

@@ -19,7 +19,7 @@ use crate::{
 pub struct BrowseCommandArgs {
     /// Specify the forge which affects the API schema etc.
     #[arg(long, value_name = "TYPE")]
-    pub api: Option<ApiType>,
+    api: Option<ApiType>,
 
     /// Open this commit-ish. If <PATH> is provided, open the file at this
     /// commit-ish
@@ -44,7 +44,7 @@ pub struct BrowseCommandArgs {
 
     /// Git remote to use
     #[arg(long, default_value = "origin")]
-    pub remote: String,
+    remote: String,
 }
 
 // =============================================================================

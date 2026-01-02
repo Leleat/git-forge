@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 
+import { GITLAB_PORT } from "../utils.js";
 import issues from "./data/gitlab/issue.json";
 import mrs from "./data/gitlab/mr.json";
 
@@ -33,6 +34,11 @@ interface MergeRequest {
 interface CreateMrRequest {
     source_branch: string;
     target_branch: string;
+    title: string;
+    description?: string;
+}
+
+interface CreateIssueRequest {
     title: string;
     description?: string;
 }
@@ -146,6 +152,7 @@ export function createGitLabServer(): express.Express {
     );
 
     let mrIid = 1;
+    let issueIid = 1;
 
     // Create merge request endpoint
     app.post(
@@ -173,7 +180,7 @@ export function createGitLabServer(): express.Express {
                 state: "opened",
                 labels: [],
                 author: { username: "test-user" },
-                web_url: `http://localhost:3002/user/repo/-/merge_requests/${mrIid}`,
+                web_url: `http://localhost:${GITLAB_PORT}/user/repo/-/merge_requests/${mrIid}`,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
                 source_branch: body.source_branch,
@@ -184,6 +191,41 @@ export function createGitLabServer(): express.Express {
             mrIid++;
 
             res.status(201).json(newMr);
+        },
+    );
+
+    // Create issue endpoint
+    app.post(
+        "/api/v4/projects/:projectId/issues",
+        (req: Request, res: Response) => {
+            const authHeader = req.headers.authorization;
+
+            if (!authHeader || !authHeader.startsWith("Bearer ")) {
+                res.sendStatus(401);
+
+                return;
+            }
+
+            const body = req.body as CreateIssueRequest;
+
+            if (!body.title) {
+                res.sendStatus(422);
+
+                return;
+            }
+
+            const newIssue: Issue = {
+                iid: issueIid,
+                title: body.title,
+                state: "opened",
+                labels: [],
+                author: { username: "test-user" },
+                web_url: `http://localhost:${GITLAB_PORT}/user/repo/-/issues/${issueIid}`,
+            };
+
+            issueIid++;
+
+            res.status(201).json(newIssue);
         },
     );
 

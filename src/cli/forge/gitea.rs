@@ -3,13 +3,13 @@ use anyhow::Context;
 use crate::{
     cli::{
         forge::http_client::{HttpClient, WithAuth},
-        issue::{Issue, IssueState, ListIssueFilters},
+        issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
     git::GitRemoteData,
 };
 
-const AUTH_TOKEN: &str = "GITEA_TOKEN";
+const AUTH_TOKEN: &str = "GIT_FORGE_GITEA_TOKEN";
 const AUTH_SCHEME: &str = "token";
 
 // =============================================================================
@@ -149,6 +149,34 @@ pub fn get_issues(
     Ok(issues)
 }
 
+pub fn create_issue(
+    http_client: &HttpClient,
+    remote: &GitRemoteData,
+    api_url: Option<&str>,
+    options: &CreateIssueOptions,
+) -> anyhow::Result<Issue> {
+    let base_url = match api_url {
+        Some(url) => url,
+        None => &build_api_base_url(remote),
+    };
+    let repo_path = &remote.path;
+    let url = format!("{base_url}/repos/{repo_path}/issues");
+    let request_body = serde_json::json!({
+        "title": options.title,
+        "body": options.body.unwrap_or_default(),
+    });
+    let issue: GiteaIssue = http_client
+        .post(&url)
+        .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
+        .json(&request_body)
+        .send()
+        .context("Failed to create issue on Gitea/Forgejo")?
+        .json()
+        .context("Failed to parse Gitea/Forgejo API response")?;
+
+    Ok(issue.into())
+}
+
 pub fn get_prs(
     http_client: &HttpClient,
     remote: &GitRemoteData,
@@ -251,6 +279,10 @@ pub fn get_url_for_issue(remote: &GitRemoteData, issue_number: u32) -> String {
 
 pub fn get_url_for_issues(remote: &GitRemoteData) -> String {
     format!("{}/issues", build_web_base_url(remote))
+}
+
+pub fn get_url_for_issue_creation(remote: &GitRemoteData) -> String {
+    format!("{}/issues/new", build_web_base_url(remote))
 }
 
 pub fn get_url_for_pr(remote: &GitRemoteData, pr_number: u32) -> String {

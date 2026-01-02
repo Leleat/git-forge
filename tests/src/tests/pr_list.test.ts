@@ -10,9 +10,9 @@ import {
 } from "../utils.js";
 
 describe.each([
-    { forge: "github", token: "GITHUB_TOKEN" } as const,
-    { forge: "gitea", token: "GITEA_TOKEN" } as const,
-    { forge: "gitlab", token: "GITLAB_TOKEN" } as const,
+    { forge: "github", token: "GIT_FORGE_GITHUB_TOKEN" } as const,
+    { forge: "gitea", token: "GIT_FORGE_GITEA_TOKEN" } as const,
+    { forge: "gitlab", token: "GIT_FORGE_GITLAB_TOKEN" } as const,
 ])("PR List Command ($forge)", ({ forge, token }) => {
     let tempDir: string;
 
@@ -73,7 +73,7 @@ describe.each([
 
     it("Should list pull requests using the 'p l' alias", () => {
         const result = runGitForge({
-            args: ["p", "l", "--api", forge, "--api-url", getApiUrl(forge)],
+            args: ["p", "ls", "--api", forge, "--api-url", getApiUrl(forge)],
             cwd: tempDir,
         });
 

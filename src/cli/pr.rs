@@ -5,7 +5,7 @@ use clap::{ArgAction, Args, Subcommand};
 
 use crate::{
     cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
-    git,
+    git::{self, GitRemoteData},
 };
 
 // =============================================================================
@@ -28,12 +28,13 @@ pub enum PrCommand {
     #[command(alias = "co")]
     Checkout(PrCheckoutCommandArgs),
 
-    /// Create a new pull request from the current branch.
+    /// Create a new pull request from the current branch and open the pull
+    /// request in the web browser.
     #[command(alias = "cr")]
     Create(PrCreateCommandArgs),
 
     /// List pull requests as TSV.
-    #[command(alias = "l")]
+    #[command(alias = "ls")]
     List(PrListCommandArgs),
 }
 
@@ -42,19 +43,19 @@ pub enum PrCommand {
 pub struct PrCheckoutCommandArgs {
     /// Specify the forge which affects the API schema etc
     #[arg(long, value_name = "TYPE")]
-    pub api: Option<ApiType>,
+    api: Option<ApiType>,
 
     /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4)
     /// instead of relying on the auto-detection
     #[arg(long)]
-    pub api_url: Option<String>,
+    api_url: Option<String>,
 
     /// PR number to checkout
-    pub number: u32,
+    number: u32,
 
     /// Git remote to use
     #[arg(long, default_value = "origin")]
-    pub remote: String,
+    remote: String,
 }
 
 /// Command-line arguments for creating a new pull request.
@@ -62,35 +63,39 @@ pub struct PrCheckoutCommandArgs {
 pub struct PrCreateCommandArgs {
     /// Specify the forge which affects the API schema etc
     #[arg(long, value_name = "TYPE")]
-    pub api: Option<ApiType>,
+    api: Option<ApiType>,
 
     /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection
     #[arg(long)]
-    pub api_url: Option<String>,
+    api_url: Option<String>,
 
     // PR description
     #[arg(long)]
-    pub body: Option<String>,
+    body: Option<String>,
 
     /// Create as draft PR
     #[arg(long)]
-    pub draft: bool,
+    draft: bool,
+
+    /// Don't open the issue in the browser after creation
+    #[arg(short, long)]
+    no_browser: bool,
 
     /// Push branch to remote
     #[arg(long, default_value = "true", action = ArgAction::Set)]
-    pub push: bool,
+    push: bool,
 
     /// Git remote to use
     #[arg(long, default_value = "origin")]
-    pub remote: String,
+    remote: String,
 
     /// Target branch
     #[arg(long)]
-    pub target: Option<String>,
+    target: Option<String>,
 
     /// PR title
     #[arg(long)]
-    pub title: Option<String>,
+    title: Option<String>,
 }
 
 /// Command-line arguments for listing pull requests.
@@ -98,47 +103,53 @@ pub struct PrCreateCommandArgs {
 pub struct PrListCommandArgs {
     /// Specify the forge which affects the API schema etc
     #[arg(long, value_name = "TYPE")]
-    pub api: Option<ApiType>,
+    api: Option<ApiType>,
 
-    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection
+    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4)
+    /// instead of relying on the auto-detection
     #[arg(long)]
-    pub api_url: Option<String>,
+    api_url: Option<String>,
 
-    /// Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
+    /// Use authentication with environment variables (GIT_FORGE_GITHUB_TOKEN,
+    /// GIT_FORGE_GITLAB_TOKEN, GIT_FORGE_GITEA_TOKEN)
     #[arg(long)]
-    pub auth: bool,
+    auth: bool,
 
     /// Filter by author username
     #[arg(long)]
-    pub author: Option<String>,
+    author: Option<String>,
 
     /// Columns to include in TSV output (comma-separated)
     #[arg(long, value_delimiter = ',')]
-    pub columns: Vec<String>,
+    columns: Vec<String>,
 
     /// Filter to only draft PRs
     #[arg(long)]
-    pub draft: bool,
+    draft: bool,
 
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
-    pub labels: Vec<String>,
+    labels: Vec<String>,
 
     /// Page number to fetch
     #[arg(long, default_value_t = 1, value_name = "NUMBER")]
-    pub page: u32,
+    page: u32,
 
     /// Number of PRs per page
-    #[arg( long, default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
-    pub per_page: u32,
+    #[arg(long, short_alias = 'l', alias = "limit", default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
+    per_page: u32,
 
     /// Git remote to use
     #[arg(long, default_value = "origin")]
-    pub remote: String,
+    remote: String,
 
     /// Filter by state
     #[arg(long)]
-    pub state: Option<PrState>,
+    state: Option<PrState>,
+
+    /// Open the prs page in the web browser
+    #[arg(short, long)]
+    web: bool,
 }
 
 // =============================================================================
@@ -217,9 +228,8 @@ pub struct CreatePrOptions<'a> {
 // =============================================================================
 
 /// Lists pull requests from the remote repository's forge and outputs them as
-/// TSV.
+/// TSV or open the prs page in the web browser.
 pub fn list_prs(args: PrListCommandArgs) -> anyhow::Result<()> {
-    let http_client = HttpClient::new();
     let remote = git::get_remote_data(&args.remote)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
     let api_type = match args.api {
@@ -227,41 +237,26 @@ pub fn list_prs(args: PrListCommandArgs) -> anyhow::Result<()> {
         None => forge::guess_api_type_from_host(&remote.host)
             .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
     };
-    let pr_filters = ListPrsFilters {
-        author: args.author.as_deref(),
-        labels: &args.labels,
-        page: args.page,
-        per_page: args.per_page,
-        state: &args.state.unwrap_or(PrState::Open),
-        draft: args.draft,
-    };
-    let get_prs = match api_type {
-        ApiType::GitHub => github::get_prs,
-        ApiType::GitLab => gitlab::get_prs,
-        ApiType::Gitea | ApiType::Forgejo => gitea::get_prs,
-    };
-    let prs = get_prs(
-        &http_client,
-        &remote,
-        args.api_url.as_deref(),
-        &pr_filters,
-        args.auth,
-    )?;
 
-    let output = format_prs_to_tsv(
-        &prs,
-        if args.columns.is_empty() {
-            vec!["id".to_string(), "title".to_string(), "url".to_string()]
-        } else {
-            args.columns
-        },
-    );
-
-    if !output.is_empty() {
-        println!("{output}");
+    if args.web {
+        list_prs_in_web_browser(&remote, &api_type)
+    } else {
+        list_prs_to_stdout(
+            &remote,
+            &api_type,
+            args.api_url.as_deref(),
+            &ListPrsFilters {
+                author: args.author.as_deref(),
+                labels: &args.labels,
+                page: args.page,
+                per_page: args.per_page,
+                state: &args.state.unwrap_or(PrState::Open),
+                draft: args.draft,
+            },
+            args.columns,
+            args.auth,
+        )
     }
-
-    Ok(())
 }
 
 /// Checks out a pull request as a local branch.
@@ -342,7 +337,11 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
         &create_options,
     )?;
 
-    println!("PR created at {}", pr.url);
+    if args.no_browser {
+        println!("PR created at {}", pr.url);
+    } else {
+        open::that(pr.url)?;
+    }
 
     Ok(())
 }
@@ -350,6 +349,49 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
 // =============================================================================
 // Private Helpers
 // =============================================================================
+
+fn list_prs_in_web_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
+    let get_prs_url = match api_type {
+        ApiType::GitHub => github::get_url_for_prs,
+        ApiType::GitLab => gitlab::get_url_for_prs,
+        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_prs,
+    };
+
+    open::that(get_prs_url(remote))?;
+
+    Ok(())
+}
+
+fn list_prs_to_stdout(
+    remote: &GitRemoteData,
+    api_type: &ApiType,
+    api_url: Option<&str>,
+    filters: &ListPrsFilters,
+    columns: Vec<String>,
+    use_auth: bool,
+) -> anyhow::Result<()> {
+    let get_prs = match api_type {
+        ApiType::GitHub => github::get_prs,
+        ApiType::GitLab => gitlab::get_prs,
+        ApiType::Gitea | ApiType::Forgejo => gitea::get_prs,
+    };
+    let prs = get_prs(&HttpClient::new(), remote, api_url, filters, use_auth)?;
+
+    let output = format_prs_to_tsv(
+        &prs,
+        if columns.is_empty() {
+            vec!["id".to_string(), "title".to_string(), "url".to_string()]
+        } else {
+            columns
+        },
+    );
+
+    if !output.is_empty() {
+        println!("{output}");
+    }
+
+    Ok(())
+}
 
 fn format_prs_to_tsv(prs: &[Pr], columns: Vec<String>) -> String {
     prs.iter()

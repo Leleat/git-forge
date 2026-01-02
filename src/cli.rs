@@ -17,7 +17,7 @@ mod pr;
 
 pub use browse::browse_repository;
 pub use completions::generate_completions;
-pub use issue::{IssueCommand, list_issues};
+pub use issue::{IssueCommand, create_issue, list_issues};
 pub use pr::{PrCommand, checkout_pr, create_pr, list_prs};
 
 use clap::{Parser, Subcommand};
@@ -41,14 +41,14 @@ pub enum GitForgeCommand {
     Browse(BrowseCommandArgs),
 
     /// Generate shell completions.
-    #[command(alias = "c", about = "Generate shell completions")]
+    #[command(alias = "c")]
     Completions(CompletionsCommandArgs),
 
     /// List issues from the remote repository.
-    #[command(alias = "i", about = "List issues from the remote repository")]
+    #[command(alias = "i")]
     Issue(IssueCommandArgs),
 
     /// Interact with pull requests.
-    #[command(alias = "p", about = "Interact with pull requests")]
+    #[command(alias = "p")]
     Pr(PrCommandArgs),
 }

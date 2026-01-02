@@ -21,10 +21,12 @@ npm run test:once
 
 - GitHub
     - [List Issues](https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#list-repository-issues)
+    - [Create Issue](https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#create-an-issue)
     - [List PRs](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests)
     - [Create PRs](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#create-a-pull-request)
 - GitLab
     - [List Issues](https://docs.gitlab.com/api/issues/#list-project-issues)
+    - [Create Issue](https://docs.gitlab.com/api/issues/#new-issue)
     - [List MRs](https://docs.gitlab.com/api/merge_requests/#list-project-merge-requests)
     - [Create MR](https://docs.gitlab.com/api/merge_requests/#create-mr)
 - Gitea
