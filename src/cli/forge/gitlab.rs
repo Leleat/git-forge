@@ -3,214 +3,19 @@ use url::form_urlencoded::byte_serialize;
 
 use crate::{
     cli::{
-        forge::{
-            ForgeClient,
-            http_client::{HttpClient, WithAuth},
-        },
-        issue::{Issue, IssueState},
-        pr::{Pr, PrState},
-        web::WebTarget,
+        forge::http_client::{HttpClient, WithAuth},
+        issue::{Issue, IssueState, ListIssueFilters},
+        pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
     git::GitRemoteData,
 };
 
-// =============================================================================
-// Domain Types
-// =============================================================================
-
 const AUTH_TOKEN: &str = "GITLAB_TOKEN";
 const AUTH_SCHEME: &str = "Bearer";
 
-pub struct GitLabClient {
-    api_url: Option<String>,
-    remote: Option<GitRemoteData>,
-    http_client: HttpClient,
-}
-
-impl GitLabClient {
-    pub fn new(remote: Option<GitRemoteData>, api_url: Option<String>) -> Self {
-        GitLabClient {
-            remote,
-            http_client: HttpClient::new(),
-            api_url,
-        }
-    }
-
-    fn get_api_base_url(&self) -> anyhow::Result<String> {
-        if let Some(api_url) = &self.api_url {
-            return Ok(api_url.clone());
-        }
-
-        let (host, port) = match self.remote.as_ref() {
-            Some(v) => (&v.host, v.port),
-            None => anyhow::bail!("No remote data available and no API URL provided"),
-        };
-        let base_url = match port {
-            Some(p) => format!("https://{host}:{p}/api/v4"),
-            None => format!("https://{host}/api/v4"),
-        };
-
-        Ok(base_url)
-    }
-}
-
-impl ForgeClient for GitLabClient {
-    fn get_issues(
-        &self,
-        use_auth: bool,
-        author: Option<&str>,
-        labels: &[String],
-        page: u32,
-        per_page: u32,
-        state: IssueState,
-    ) -> anyhow::Result<Vec<Issue>> {
-        let base_url = self.get_api_base_url()?;
-        let encoded_path: String = match self.remote.as_ref() {
-            Some(v) => byte_serialize(v.path.as_bytes()).collect(),
-            None => anyhow::bail!("No remote data available"),
-        };
-        let url = format!("{base_url}/projects/{encoded_path}/issues");
-        let state = match state {
-            IssueState::Open => "opened".to_string(),
-            _ => state.to_string(),
-        };
-        let mut request = self
-            .http_client
-            .get(&url)
-            .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
-            .query(&[("state", state)])
-            .query(&[("page", page)])
-            .query(&[("per_page", per_page)]);
-
-        if let Some(author) = author {
-            request = request.query(&[("author_username", author)]);
-        }
-
-        if !labels.is_empty() {
-            request = request.query(&[("labels", labels.join(","))]);
-        }
-
-        let issues = request
-            .send()
-            .context("Failed to fetch issues from GitLab API")?
-            .json::<Vec<GitLabIssue>>()
-            .context("Failed to parse GitLab API response")?
-            .into_iter()
-            .map(Into::into)
-            .collect::<Vec<Issue>>();
-
-        Ok(issues)
-    }
-
-    fn get_prs(
-        &self,
-        use_auth: bool,
-        author: Option<&str>,
-        labels: &[String],
-        page: u32,
-        per_page: u32,
-        state: PrState,
-        draft: bool,
-    ) -> anyhow::Result<Vec<Pr>> {
-        let base_url = self.get_api_base_url()?;
-        let remote = match self.remote.as_ref() {
-            Some(v) => v,
-            None => anyhow::bail!("No remote data available"),
-        };
-        let encoded_path: String = byte_serialize(remote.path.as_bytes()).collect();
-        let url = format!("{base_url}/projects/{encoded_path}/merge_requests");
-        let state = match state {
-            PrState::Open => "opened".to_string(),
-            _ => state.to_string(),
-        };
-        let mut request = self
-            .http_client
-            .get(&url)
-            .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
-            .query(&[("state", state)])
-            .query(&[("page", page)])
-            .query(&[("per_page", per_page)]);
-
-        if let Some(author_name) = author {
-            request = request.query(&[("author_username", author_name)]);
-        }
-
-        if !labels.is_empty() {
-            request = request.query(&[("labels", labels.join(","))]);
-        }
-
-        if draft {
-            request = request.query(&[("wip", "yes")]);
-        }
-
-        let mrs: Vec<GitLabMergeRequest> = request
-            .send()
-            .context("Failed to fetch merge requests from GitLab API")?
-            .json()
-            .context("Failed to parse GitLab API response")?;
-
-        Ok(mrs.into_iter().map(Into::into).collect())
-    }
-
-    fn create_pr(
-        &self,
-        title: &str,
-        source_branch: &str,
-        target_branch: &str,
-        body: Option<&str>,
-        draft: bool,
-    ) -> anyhow::Result<Pr> {
-        let base_url = self.get_api_base_url()?;
-        let remote = match self.remote.as_ref() {
-            Some(v) => v,
-            None => anyhow::bail!("No remote data available"),
-        };
-        let encoded_path: String = byte_serialize(remote.path.as_bytes()).collect();
-        let url = format!("{base_url}/projects/{encoded_path}/merge_requests");
-        let request_body = serde_json::json!({
-            "source_branch": source_branch,
-            "target_branch": target_branch,
-            "title": if draft { format!("Draft: {title}") } else { title.to_string() },
-            "description": body.unwrap_or_default(),
-        });
-
-        let mr: GitLabMergeRequest = self
-            .http_client
-            .post(&url)
-            .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
-            .json(&request_body)
-            .send()
-            .context("Failed to create merge request on GitLab")?
-            .json()
-            .context("Failed to parse GitLab API response")?;
-
-        Ok(mr.into())
-    }
-
-    fn get_pr_ref(&self, pr_number: u32) -> String {
-        format!("merge-requests/{pr_number}/head")
-    }
-
-    fn get_web_url(&self, target: WebTarget) -> anyhow::Result<String> {
-        let remote = match self.remote.as_ref() {
-            Some(v) => v,
-            None => anyhow::bail!("No remote data available"),
-        };
-        let host = &remote.host;
-        let path = &remote.path;
-        let base_url = match remote.port {
-            Some(port) => format!("https://{host}:{port}/{path}"),
-            None => format!("https://{host}/{path}"),
-        };
-        let url = match target {
-            WebTarget::Issues => format!("{base_url}/-/issues"),
-            WebTarget::Mrs | WebTarget::Prs => format!("{base_url}/-/merge_requests"),
-            WebTarget::Repository => base_url,
-        };
-
-        Ok(url)
-    }
-}
+// =============================================================================
+// Domain Types
+// =============================================================================
 
 /// GitLab API response for issues.
 /// https://docs.gitlab.com/api/issues/#list-project-issues
@@ -286,5 +91,200 @@ impl From<GitLabMergeRequest> for Pr {
             target_branch: mr.target_branch,
             draft: mr.draft,
         }
+    }
+}
+
+// =============================================================================
+// Command Logic
+// =============================================================================
+
+pub fn get_issues(
+    http_client: &HttpClient,
+    remote: &GitRemoteData,
+    api_url: Option<&str>,
+    filters: &ListIssueFilters,
+    use_auth: bool,
+) -> anyhow::Result<Vec<Issue>> {
+    let base_url = match api_url {
+        Some(url) => url,
+        None => &build_api_base_url(remote),
+    };
+    let encoded_path = byte_serialize(remote.path.as_bytes()).collect::<String>();
+    let url = format!("{base_url}/projects/{encoded_path}/issues");
+    let state = match filters.state {
+        IssueState::Open => "opened".to_string(),
+        _ => filters.state.to_string(),
+    };
+    let mut request = http_client
+        .get(&url)
+        .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
+        .query(&[("state", state)])
+        .query(&[("page", filters.page)])
+        .query(&[("per_page", filters.per_page)]);
+
+    if let Some(author) = filters.author {
+        request = request.query(&[("author_username", author)]);
+    }
+
+    if !filters.labels.is_empty() {
+        request = request.query(&[("labels", filters.labels.join(","))]);
+    }
+
+    let issues = request
+        .send()
+        .context("Failed to fetch issues from GitLab API")?
+        .json::<Vec<GitLabIssue>>()
+        .context("Failed to parse GitLab API response")?
+        .into_iter()
+        .map(Into::into)
+        .collect::<Vec<Issue>>();
+
+    Ok(issues)
+}
+
+pub fn get_prs(
+    http_client: &HttpClient,
+    remote: &GitRemoteData,
+    api_url: Option<&str>,
+    filters: &ListPrsFilters,
+    use_auth: bool,
+) -> anyhow::Result<Vec<Pr>> {
+    let base_url = match api_url {
+        Some(url) => url,
+        None => &build_api_base_url(remote),
+    };
+    let encoded_path = byte_serialize(remote.path.as_bytes()).collect::<String>();
+    let url = format!("{base_url}/projects/{encoded_path}/merge_requests");
+    let state = match filters.state {
+        PrState::Open => "opened".to_string(),
+        _ => filters.state.to_string(),
+    };
+    let mut request = http_client
+        .get(&url)
+        .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
+        .query(&[("state", state)])
+        .query(&[("page", filters.page)])
+        .query(&[("per_page", filters.per_page)]);
+
+    if let Some(author_name) = filters.author {
+        request = request.query(&[("author_username", author_name)]);
+    }
+
+    if !filters.labels.is_empty() {
+        request = request.query(&[("labels", filters.labels.join(","))]);
+    }
+
+    if filters.draft {
+        request = request.query(&[("wip", "yes")]);
+    }
+
+    let mrs: Vec<GitLabMergeRequest> = request
+        .send()
+        .context("Failed to fetch merge requests from GitLab API")?
+        .json()
+        .context("Failed to parse GitLab API response")?;
+
+    Ok(mrs.into_iter().map(Into::into).collect())
+}
+
+pub fn create_pr(
+    http_client: &HttpClient,
+    remote: &GitRemoteData,
+    api_url: Option<&str>,
+    options: &CreatePrOptions,
+) -> anyhow::Result<Pr> {
+    let base_url = match api_url {
+        Some(url) => url,
+        None => &build_api_base_url(remote),
+    };
+    let encoded_path = byte_serialize(remote.path.as_bytes()).collect::<String>();
+    let url = format!("{base_url}/projects/{encoded_path}/merge_requests");
+    let request_body = serde_json::json!({
+        "source_branch": options.source_branch,
+        "target_branch": options.target_branch,
+        "title": if options.draft { format!("Draft: {}", options.title) } else { options.title.to_string() },
+        "description": options.body.unwrap_or_default(),
+    });
+
+    let mr: GitLabMergeRequest = http_client
+        .post(&url)
+        .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
+        .json(&request_body)
+        .send()
+        .context("Failed to create merge request on GitLab")?
+        .json()
+        .context("Failed to parse GitLab API response")?;
+
+    Ok(mr.into())
+}
+
+pub fn get_pr_ref(pr_number: u32) -> String {
+    format!("merge-requests/{pr_number}/head")
+}
+
+pub fn get_url_for_home(remote: &GitRemoteData) -> String {
+    build_web_base_url(remote)
+}
+
+pub fn get_url_for_commit(remote: &GitRemoteData, commit: &str) -> String {
+    format!("{}/-/commit/{}", build_web_base_url(remote), commit)
+}
+
+pub fn get_url_for_issue(remote: &GitRemoteData, issue_number: u32) -> String {
+    format!("{}/-/issues/{}", build_web_base_url(remote), issue_number)
+}
+
+pub fn get_url_for_issues(remote: &GitRemoteData) -> String {
+    format!("{}/-/issues", build_web_base_url(remote))
+}
+
+pub fn get_url_for_pr(remote: &GitRemoteData, pr_number: u32) -> String {
+    format!(
+        "{}/-/merge_requests/{}",
+        build_web_base_url(remote),
+        pr_number
+    )
+}
+
+pub fn get_url_for_prs(remote: &GitRemoteData) -> String {
+    format!("{}/-/merge_requests", build_web_base_url(remote))
+}
+
+pub fn get_url_for_path(
+    remote: &GitRemoteData,
+    path: &str,
+    commit: &str,
+    line_number: Option<u32>,
+) -> String {
+    let base = build_web_base_url(remote);
+    let mut url = format!("{base}/-/blob/{commit}/{path}");
+
+    if let Some(line) = line_number {
+        url.push_str(&format!("#L{}", line));
+    }
+
+    url
+}
+
+// =============================================================================
+// Private Helpers
+// =============================================================================
+
+fn build_api_base_url(remote: &GitRemoteData) -> String {
+    let (host, port) = (&remote.host, remote.port);
+
+    match port {
+        Some(p) => format!("https://{host}:{p}/api/v4"),
+        None => format!("https://{host}/api/v4"),
+    }
+}
+
+fn build_web_base_url(remote: &GitRemoteData) -> String {
+    let host = &remote.host;
+    let path = &remote.path;
+
+    match remote.port {
+        Some(port) => format!("https://{host}:{port}/{path}"),
+        None => format!("https://{host}/{path}"),
     }
 }

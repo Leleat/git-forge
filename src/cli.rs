@@ -1,28 +1,30 @@
 mod forge {
-    mod forge_client;
-    mod gitea;
-    mod github;
-    mod gitlab;
+    pub mod gitea;
+    pub mod github;
+    pub mod gitlab;
+
+    mod api_type;
     mod http_client;
 
-    pub use forge_client::{ApiType, ForgeClient, create_forge_client};
+    pub use api_type::{ApiType, guess_api_type_from_host};
+    pub use http_client::HttpClient;
 }
 
+mod browse;
 mod completions;
 mod issue;
 mod pr;
-mod web;
 
+pub use browse::browse_repository;
 pub use completions::generate_completions;
-pub use issue::list_issues;
+pub use issue::{IssueCommand, list_issues};
 pub use pr::{PrCommand, checkout_pr, create_pr, list_prs};
-pub use web::print_web_url;
 
 use clap::{Parser, Subcommand};
 
 use crate::cli::{
-    completions::CompletionsCommandArgs, issue::IssueCommandArgs, pr::PrCommandArgs,
-    web::WebCommandArgs,
+    browse::BrowseCommandArgs, completions::CompletionsCommandArgs, issue::IssueCommandArgs,
+    pr::PrCommandArgs,
 };
 
 #[derive(Parser)]
@@ -34,6 +36,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum GitForgeCommand {
+    /// Open repository links in your browser or print them to stdout
+    #[command(alias = "b")]
+    Browse(BrowseCommandArgs),
+
     /// Generate shell completions.
     #[command(alias = "c", about = "Generate shell completions")]
     Completions(CompletionsCommandArgs),
@@ -45,8 +51,4 @@ pub enum GitForgeCommand {
     /// Interact with pull requests.
     #[command(alias = "p", about = "Interact with pull requests")]
     Pr(PrCommandArgs),
-
-    /// Get the web URL for the remote repository.
-    #[command(alias = "w", about = "Get the web URL for the remote repository")]
-    Web(WebCommandArgs),
 }

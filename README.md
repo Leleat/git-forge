@@ -15,7 +15,7 @@ git forge [<subcommand>] [<options>]
 
 - `issue` - List issues
 - `pr` - List pull requests, create a pull request, and checkout a pull request
-- `web` - Get the web URLs for the repository, for the issues, and for the PRs
+- `browse` - Open repository links in your browser or print them to stdout (repository home, issues, PRs, commits, files)
 - `completions` - generate shell completions. See [limitations](#shell-completions) below.
 
 Note that due to differing forge APIs, some behavior may vary across forges. E.g. filtering of PRs may happen client-side for some forges, while it happens server-side for others.
@@ -27,10 +27,6 @@ Note that due to differing forge APIs, some behavior may vary across forges. E.g
 [alias]
     # Search for and copy an issue link to clipboard. `copy` is a custom script
     fcpissue = "!git forge issue | fzf | cut -f 3 | copy"
-    # Search for and open an issue in your browser (on linux)
-    fopenissue = "!git forge issue | fzf | cut -f 3 | xargs xdg-open &> /dev/null"
-    # Open the issues page on a git forge (on linux); e.g. https://github.com/Leleat/git-forge/issues
-    fopenissues = "!git forge web --target issues | xargs xdg-open &> /dev/null"
     # Search for a PR and check it out locally
     freviewpr = "!git forge pr list | fzf | cut -f 1 | xargs git forge pr checkout"
 ```

@@ -1,8 +1,12 @@
 //! The `issue` subcommand.
 
-use clap::Args;
+use anyhow::Context;
+use clap::{Args, Subcommand};
 
-use crate::cli::forge::{self, ApiType};
+use crate::{
+    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+    git,
+};
 
 // =============================================================================
 // CLI Arguments
@@ -13,62 +17,58 @@ const DEFAULT_PER_PAGE: u32 = 30;
 /// Command-line arguments for the `issue` subcommand.
 #[derive(Args)]
 pub struct IssueCommandArgs {
-    #[arg(
-        long,
-        value_name = "TYPE",
-        help = "Specify the forge which affects the API schema etc."
-    )]
+    #[command(subcommand)]
+    pub subcommand: IssueCommand,
+}
+
+/// Available subcommands for issue subcommand.
+#[derive(Subcommand)]
+pub enum IssueCommand {
+    /// List issues as TSV.
+    #[command(alias = "l")]
+    List(IssueListCommandArgs),
+}
+
+/// Command-line arguments for listing issues.
+#[derive(Args)]
+pub struct IssueListCommandArgs {
+    /// Specify the forge which affects the API schema etc
+    #[arg(long, value_name = "TYPE")]
     pub api: Option<ApiType>,
 
-    #[arg(
-        long,
-        help = "Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection"
-    )]
+    /// Explicitly provide the base API URL (e.g. https://gitlab.com/api/v4) instead of relying on the auto-detection
+    #[arg(long)]
     pub api_url: Option<String>,
 
-    #[arg(
-        long,
-        help = "Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)"
-    )]
+    /// Use authentication with environment variables (GITHUB_TOKEN, GITLAB_TOKEN, GITEA_TOKEN)
+    #[arg(long)]
     pub auth: bool,
 
     #[arg(long, help = "Filter by author username")]
     pub author: Option<String>,
 
-    #[arg(
-        long,
-        value_delimiter = ',',
-        help = "Columns to include in TSV output (comma-separated)"
-    )]
+    /// Columns to include in TSV output (comma-separated)
+    #[arg(long, value_delimiter = ',')]
     pub columns: Vec<String>,
 
-    #[arg(
-        long,
-        value_delimiter = ',',
-        help = "Filter by labels (comma-separated)"
-    )]
+    /// Filter by labels (comma-separated)
+    #[arg(long, value_delimiter = ',')]
     pub labels: Vec<String>,
 
-    #[arg(
-        long,
-        default_value_t = 1,
-        value_name = "NUMBER",
-        help = "Page number to fetch"
-    )]
+    /// Page number to fetch
+    #[arg(long, default_value_t = 1, value_name = "NUMBER")]
     pub page: u32,
 
-    #[arg(
-        long,
-        default_value_t = DEFAULT_PER_PAGE,
-        value_name = "NUMBER",
-        help = "Number of issues per page"
-    )]
+    /// Number of issues per page
+    #[arg(long, default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
     pub per_page: u32,
 
-    #[arg(long, default_value = "origin", help = "Git remote to use")]
+    /// Git remote to use
+    #[arg(long, default_value = "origin")]
     pub remote: String,
 
-    #[arg(long, help = "Filter by state")]
+    /// Filter by state
+    #[arg(long)]
     pub state: Option<IssueState>,
 }
 
@@ -114,27 +114,57 @@ pub struct Issue {
     pub labels: Vec<String>,
 }
 
+pub struct ListIssueFilters<'a> {
+    pub author: Option<&'a str>,
+    pub labels: &'a [String],
+    pub page: u32,
+    pub per_page: u32,
+    pub state: &'a IssueState,
+}
+
 // =============================================================================
 // Command Logic
 // =============================================================================
 
 /// Lists issues from the remote repository's forge and outputs them as TSV.
-pub fn list_issues(args: IssueCommandArgs) -> anyhow::Result<()> {
-    let forge_client = forge::create_forge_client(args.remote, args.api, args.api_url)?;
-    let issues = forge_client.get_issues(
-        args.auth,
-        args.author.as_deref(),
-        args.labels.as_ref(),
-        args.page,
-        args.per_page,
-        args.state.unwrap_or(IssueState::Open),
-    )?;
-    let columns = if args.columns.is_empty() {
-        None
-    } else {
-        Some(args.columns)
+pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
+    let http_client = HttpClient::new();
+    let remote = git::get_remote_data(&args.remote)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
+    let api_type = match args.api {
+        Some(api_type) => api_type,
+        None => forge::guess_api_type_from_host(&remote.host)
+            .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
     };
-    let output = format_issues_to_tsv(&issues, columns);
+    let get_issues = match api_type {
+        ApiType::GitHub => github::get_issues,
+        ApiType::GitLab => gitlab::get_issues,
+        ApiType::Gitea | ApiType::Forgejo => gitea::get_issues,
+    };
+    let issue_filters = ListIssueFilters {
+        author: args.author.as_deref(),
+        labels: &args.labels,
+        page: args.page,
+        per_page: args.per_page,
+        state: &args.state.unwrap_or(IssueState::Open),
+    };
+    let issues = get_issues(
+        &http_client,
+        &remote,
+        args.api_url.as_deref(),
+        &issue_filters,
+        args.auth,
+    )
+    .context("Failed fetching issues")?;
+
+    let output = format_issues_to_tsv(
+        &issues,
+        if args.columns.is_empty() {
+            vec!["id".to_string(), "title".to_string(), "url".to_string()]
+        } else {
+            args.columns
+        },
+    );
 
     if !output.is_empty() {
         println!("{output}");
@@ -147,10 +177,7 @@ pub fn list_issues(args: IssueCommandArgs) -> anyhow::Result<()> {
 // Private Helpers
 // =============================================================================
 
-fn format_issues_to_tsv(issues: &[Issue], columns: Option<Vec<String>>) -> String {
-    let columns =
-        columns.unwrap_or_else(|| vec!["id".to_string(), "title".to_string(), "url".to_string()]);
-
+fn format_issues_to_tsv(issues: &[Issue], columns: Vec<String>) -> String {
     issues
         .iter()
         .map(|issue| {
