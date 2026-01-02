@@ -50,7 +50,7 @@ impl WithAuth for RequestBuilder {
             Ok(token) => token,
             Err(e) => {
                 anyhow::bail!(
-                    "Auth is enabled but there is a problem with the {env_var} environment variable: {e}"
+                    "There is a problem with the environment variable ({env_var}) used for authentication: {e}"
                 )
             }
         };
