@@ -4,7 +4,10 @@ use anyhow::Context;
 use clap::{Args, Subcommand};
 
 use crate::{
-    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+    cli::{
+        forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+        input,
+    },
     git::{self, GitRemoteData},
 };
 
@@ -101,6 +104,10 @@ pub struct IssueCreateCommandArgs {
     /// Issue description
     #[arg(short, long)]
     body: Option<String>,
+
+    /// Open your text editor to write the issue message
+    #[arg(short, long)]
+    editor: bool,
 
     /// Don't open the issue in the browser after creation
     #[arg(short, long)]
@@ -221,23 +228,32 @@ pub fn create_issue(args: IssueCreateCommandArgs) -> anyhow::Result<()> {
     };
 
     if args.web {
-        create_issue_via_browser(&remote, &api_type)
-    } else {
-        let Some(title) = args.title else {
-            anyhow::bail!("--title is required when creating an issue with the CLI");
-        };
+        return create_issue_via_browser(&remote, &api_type);
+    }
 
-        create_issue_via_api(
+    if args.editor {
+        return create_issue_with_text_editor(
             &remote,
             &api_type,
             args.api_url.as_deref(),
-            &CreateIssueOptions {
-                title: &title,
-                body: &args.body.unwrap_or_default(),
-            },
             args.no_browser,
-        )
+        );
     }
+
+    let Some(title) = args.title else {
+        anyhow::bail!("--title is required when creating an issue with the CLI");
+    };
+
+    create_issue_via_api(
+        &remote,
+        &api_type,
+        args.api_url.as_deref(),
+        &CreateIssueOptions {
+            title: &title,
+            body: &args.body.unwrap_or_default(),
+        },
+        args.no_browser,
+    )
 }
 
 // =============================================================================
@@ -298,6 +314,26 @@ fn create_issue_via_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyho
     open::that(url)?;
 
     Ok(())
+}
+
+fn create_issue_with_text_editor(
+    remote: &GitRemoteData,
+    api_type: &ApiType,
+    api_url: Option<&str>,
+    no_browser: bool,
+) -> anyhow::Result<()> {
+    let message = input::open_text_editor_to_write_message()?;
+
+    create_issue_via_api(
+        remote,
+        api_type,
+        api_url,
+        &CreateIssueOptions {
+            title: &message.title,
+            body: &message.body,
+        },
+        no_browser,
+    )
 }
 
 fn create_issue_via_api(

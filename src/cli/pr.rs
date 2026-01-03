@@ -4,7 +4,10 @@ use anyhow::Context;
 use clap::{ArgAction, Args, Subcommand};
 
 use crate::{
-    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+    cli::{
+        forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+        input,
+    },
     git::{self, GitRemoteData},
 };
 
@@ -76,6 +79,10 @@ pub struct PrCreateCommandArgs {
     /// Create as draft PR
     #[arg(long)]
     draft: bool,
+
+    /// Open your text editor to write the pr message
+    #[arg(short, long)]
+    editor: bool,
 
     /// Don't open the issue in the browser after creation
     #[arg(short, long)]
@@ -315,6 +322,8 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
     };
 
     if args.push {
+        eprintln!("Pushing branch '{current_branch}'...");
+
         git::push_branch(&current_branch, &args.remote, true)?;
     }
 
@@ -323,11 +332,21 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
         ApiType::GitLab => gitlab::create_pr,
         ApiType::Gitea | ApiType::Forgejo => gitea::create_pr,
     };
+    let (title, body) = if args.editor {
+        let message = input::open_text_editor_to_write_message()?;
+
+        (message.title, message.body)
+    } else {
+        (
+            args.title.unwrap_or_else(|| current_branch.clone()),
+            args.body.unwrap_or_default(),
+        )
+    };
     let create_options = CreatePrOptions {
-        title: &args.title.unwrap_or_else(|| current_branch.clone()),
+        title: &title,
         source_branch: &current_branch,
         target_branch: &target_branch,
-        body: &args.body.unwrap_or_default(),
+        body: &body,
         draft: args.draft,
     };
     let pr = create_pr(
