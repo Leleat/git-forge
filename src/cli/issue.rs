@@ -28,7 +28,7 @@ pub struct IssueCommandArgs {
 /// Available subcommands for issue subcommand.
 #[derive(Subcommand)]
 pub enum IssueCommand {
-    /// List issues as TSV.
+    /// List issues.
     #[command(alias = "ls")]
     List(IssueListCommandArgs),
 
@@ -61,9 +61,9 @@ pub struct IssueListCommandArgs {
     #[arg(long, value_name = "USERNAME", help = "Filter by author")]
     author: Option<String>,
 
-    /// Columns to include in TSV output (comma-separated)
-    #[arg(long, value_delimiter = ',')]
-    columns: Vec<String>,
+    /// Fields to include in output (comma-separated)
+    #[arg(short, long, value_delimiter = ',')]
+    fields: Vec<IssueField>,
 
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
@@ -153,6 +153,18 @@ impl std::fmt::Display for IssueState {
     }
 }
 
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+#[value(rename_all = "lower")]
+pub enum IssueField {
+    Id,
+    Title,
+    State,
+    Labels,
+    Author,
+    Url,
+}
+
 /// An issue from a git forge.
 pub struct Issue {
     /// The issue number (e.g., #42).
@@ -187,7 +199,7 @@ pub struct CreateIssueOptions<'a> {
 // Command Logic
 // =============================================================================
 
-/// Lists issues from the remote repository's forge and outputs them as TSV or
+/// Lists issues from the remote repository's forge and outputs them or
 /// open the issues page in the web browser.
 pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&args.remote)
@@ -213,7 +225,7 @@ pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
                 per_page: args.per_page,
                 state: &args.state.unwrap_or(IssueState::Open),
             },
-            args.columns,
+            args.fields,
             args.auth,
         )
     }
@@ -281,7 +293,7 @@ fn list_issues_to_stdout(
     api_type: &ApiType,
     api_url: Option<&str>,
     filters: &ListIssueFilters,
-    columns: Vec<String>,
+    fields: Vec<IssueField>,
     use_auth: bool,
 ) -> anyhow::Result<()> {
     let get_issues = match api_type {
@@ -294,10 +306,10 @@ fn list_issues_to_stdout(
 
     let output = format_issues_to_tsv(
         &issues,
-        if columns.is_empty() {
-            vec!["id".to_string(), "title".to_string(), "url".to_string()]
+        if fields.is_empty() {
+            vec![IssueField::Id, IssueField::Title, IssueField::Url]
         } else {
-            columns
+            fields
         },
     );
 
@@ -364,13 +376,13 @@ fn create_issue_via_api(
     Ok(())
 }
 
-fn format_issues_to_tsv(issues: &[Issue], columns: Vec<String>) -> String {
+fn format_issues_to_tsv(issues: &[Issue], fields: Vec<IssueField>) -> String {
     issues
         .iter()
         .map(|issue| {
-            columns
+            fields
                 .iter()
-                .map(|col| get_column_value_for_issue(col, issue))
+                .map(|f| get_field_value_for_issue(f, issue))
                 .collect::<Vec<String>>()
                 .join("\t")
         })
@@ -378,15 +390,14 @@ fn format_issues_to_tsv(issues: &[Issue], columns: Vec<String>) -> String {
         .join("\n")
 }
 
-fn get_column_value_for_issue(column: &str, issue: &Issue) -> String {
-    match column {
-        "id" => issue.id.to_string(),
-        "title" => escape_tsv(&issue.title),
-        "state" => issue.state.to_string(),
-        "labels" => escape_tsv(&issue.labels.join(",")),
-        "author" => escape_tsv(&issue.author),
-        "url" => issue.url.clone(),
-        _ => String::new(),
+fn get_field_value_for_issue(field: &IssueField, issue: &Issue) -> String {
+    match field {
+        IssueField::Id => issue.id.to_string(),
+        IssueField::Title => escape_tsv(&issue.title),
+        IssueField::State => issue.state.to_string(),
+        IssueField::Labels => escape_tsv(&issue.labels.join(",")),
+        IssueField::Author => escape_tsv(&issue.author),
+        IssueField::Url => issue.url.clone(),
     }
 }
 

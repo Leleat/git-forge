@@ -37,7 +37,7 @@ pub enum PrCommand {
     #[command(alias = "cr")]
     Create(PrCreateCommandArgs),
 
-    /// List pull requests as TSV.
+    /// List pull requests.
     #[command(alias = "ls")]
     List(PrListCommandArgs),
 }
@@ -127,13 +127,13 @@ pub struct PrListCommandArgs {
     #[arg(long)]
     author: Option<String>,
 
-    /// Columns to include in TSV output (comma-separated)
-    #[arg(long, value_delimiter = ',')]
-    columns: Vec<String>,
-
     /// Filter to only draft PRs
     #[arg(long)]
     draft: bool,
+
+    /// Fields to include in output (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    fields: Vec<PrField>,
 
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
@@ -187,6 +187,23 @@ impl std::fmt::Display for PrState {
             PrState::All => write!(f, "all"),
         }
     }
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+#[value(rename_all = "lower")]
+pub enum PrField {
+    Id,
+    Title,
+    State,
+    Labels,
+    Author,
+    Created,
+    Updated,
+    Url,
+    Source,
+    Target,
+    Draft,
 }
 
 pub struct Pr {
@@ -261,7 +278,7 @@ pub fn list_prs(args: PrListCommandArgs) -> anyhow::Result<()> {
                 state: &args.state.unwrap_or(PrState::Open),
                 draft: args.draft,
             },
-            args.columns,
+            args.fields,
             args.auth,
         )
     }
@@ -392,7 +409,7 @@ fn list_prs_to_stdout(
     api_type: &ApiType,
     api_url: Option<&str>,
     filters: &ListPrsFilters,
-    columns: Vec<String>,
+    fields: Vec<PrField>,
     use_auth: bool,
 ) -> anyhow::Result<()> {
     let get_prs = match api_type {
@@ -404,10 +421,10 @@ fn list_prs_to_stdout(
 
     let output = format_prs_to_tsv(
         &prs,
-        if columns.is_empty() {
-            vec!["id".to_string(), "title".to_string(), "url".to_string()]
+        if fields.is_empty() {
+            vec![PrField::Id, PrField::Title, PrField::Url]
         } else {
-            columns
+            fields
         },
     );
 
@@ -418,12 +435,12 @@ fn list_prs_to_stdout(
     Ok(())
 }
 
-fn format_prs_to_tsv(prs: &[Pr], columns: Vec<String>) -> String {
+fn format_prs_to_tsv(prs: &[Pr], fields: Vec<PrField>) -> String {
     prs.iter()
         .map(|pr| {
-            columns
+            fields
                 .iter()
-                .map(|col| get_column_value_for_pr(col, pr))
+                .map(|f| get_field_value_for_pr(f, pr))
                 .collect::<Vec<String>>()
                 .join("\t")
         })
@@ -431,20 +448,19 @@ fn format_prs_to_tsv(prs: &[Pr], columns: Vec<String>) -> String {
         .join("\n")
 }
 
-fn get_column_value_for_pr(column: &str, pr: &Pr) -> String {
-    match column {
-        "id" => pr.id.to_string(),
-        "title" => escape_tsv(&pr.title),
-        "state" => pr.state.clone(),
-        "labels" => escape_tsv(&pr.labels.join(",")),
-        "author" => escape_tsv(&pr.author),
-        "created" => pr.created_at.clone(),
-        "updated" => pr.updated_at.clone(),
-        "url" => pr.url.clone(),
-        "source" => pr.source_branch.clone(),
-        "target" => pr.target_branch.clone(),
-        "draft" => (if pr.draft { "true" } else { "false" }).to_string(),
-        _ => String::new(),
+fn get_field_value_for_pr(field: &PrField, pr: &Pr) -> String {
+    match field {
+        PrField::Id => pr.id.to_string(),
+        PrField::Title => escape_tsv(&pr.title),
+        PrField::State => pr.state.clone(),
+        PrField::Labels => escape_tsv(&pr.labels.join(",")),
+        PrField::Author => escape_tsv(&pr.author),
+        PrField::Created => pr.created_at.clone(),
+        PrField::Updated => pr.updated_at.clone(),
+        PrField::Url => pr.url.clone(),
+        PrField::Source => pr.source_branch.clone(),
+        PrField::Target => pr.target_branch.clone(),
+        PrField::Draft => (if pr.draft { "true" } else { "false" }).to_string(),
     }
 }
 
