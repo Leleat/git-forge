@@ -2,6 +2,7 @@
 
 use anyhow::Context;
 use clap::{Args, Subcommand};
+use dialoguer::Input;
 
 use crate::{
     cli::{
@@ -240,8 +241,11 @@ pub fn create_issue(args: IssueCreateCommandArgs) -> anyhow::Result<()> {
         );
     }
 
-    let Some(title) = args.title else {
-        anyhow::bail!("--title is required when creating an issue with the CLI");
+    let title = match args.title {
+        Some(t) => t,
+        None => Input::new()
+            .with_prompt("Enter issue title")
+            .interact_text()?,
     };
 
     create_issue_via_api(

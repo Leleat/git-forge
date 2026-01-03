@@ -2,6 +2,7 @@
 
 use anyhow::Context;
 use clap::{Args, Subcommand};
+use dialoguer::Input;
 
 use crate::{
     cli::{
@@ -332,16 +333,21 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
         ApiType::GitLab => gitlab::create_pr,
         ApiType::Gitea | ApiType::Forgejo => gitea::create_pr,
     };
+
     let (title, body) = if args.editor {
         let message = input::open_text_editor_to_write_message()?;
 
         (message.title, message.body)
     } else {
         (
-            args.title.unwrap_or_else(|| current_branch.clone()),
+            match args.title {
+                Some(t) => t,
+                None => Input::new().with_prompt("Enter PR title").interact_text()?,
+            },
             args.body.unwrap_or_default(),
         )
     };
+
     let create_options = CreatePrOptions {
         title: &title,
         source_branch: &current_branch,
