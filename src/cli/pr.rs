@@ -1,7 +1,7 @@
 //! The `pr` subcommand.
 
 use anyhow::Context;
-use clap::{ArgAction, Args, Subcommand};
+use clap::{Args, Subcommand};
 
 use crate::{
     cli::{
@@ -88,9 +88,9 @@ pub struct PrCreateCommandArgs {
     #[arg(short, long)]
     no_browser: bool,
 
-    /// Push branch to remote
-    #[arg(long, default_value = "true", action = ArgAction::Set)]
-    push: bool,
+    /// Don't push the branch. Expect the branch to already exist at the remote.
+    #[arg(long)]
+    no_push: bool,
 
     /// Git remote to use
     #[arg(long, default_value = "origin")]
@@ -321,7 +321,7 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
             .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
     };
 
-    if args.push {
+    if !args.no_push {
         eprintln!("Pushing branch '{current_branch}'...");
 
         git::push_branch(&current_branch, &args.remote, true)?;
