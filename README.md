@@ -3,7 +3,7 @@
 A simple CLI tool for basic interactions with issues and pull requests across GitHub, GitLab, Gitea, and Forgejo.
 
 > [!WARNING]
-> This project is mostly for me to practice the Rust programming language.
+> This project is mostly for me to practice the Rust programming language. So beware. If you have feedback about the code, feel free to contact me!
 
 ## Usage
 
