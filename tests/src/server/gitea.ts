@@ -18,6 +18,7 @@ interface Issue {
     state: string;
     labels: Label[];
     user: User;
+    assignee: User | null;
     html_url: string;
 }
 
@@ -61,6 +62,7 @@ export function createGiteaServer(): express.Express {
                 state,
                 labels,
                 created_by,
+                assigned_by,
                 page = "1",
                 limit = "30",
             } = req.query;
@@ -82,6 +84,16 @@ export function createGiteaServer(): express.Express {
                         issue.labels.some((l) => l.name === label),
                     ),
                 );
+            }
+
+            // Filter by assignee
+            if (assigned_by) {
+                filtered = filtered.filter((issue) => {
+                    return (
+                        "assignee" in issue &&
+                        issue.assignee?.login === assigned_by
+                    );
+                });
             }
 
             // Filter by creator
@@ -198,6 +210,7 @@ export function createGiteaServer(): express.Express {
                 state: "open",
                 labels: [],
                 user: { login: "test-user" },
+                assignee: null,
                 html_url: `http://localhost:${GITEA_PORT}/${owner}/${repo}/issues/${issueNumber}`,
             };
 

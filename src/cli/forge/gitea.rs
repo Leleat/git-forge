@@ -126,6 +126,10 @@ pub fn get_issues(
         .query(&[("limit", filters.per_page)])
         .query(&[("type", "issues")]);
 
+    if let Some(assignee) = filters.assignee {
+        request = request.query(&[("assigned_by", assignee)]);
+    }
+
     if let Some(author) = filters.author {
         request = request.query(&[("created_by", author)]);
     }
@@ -163,7 +167,7 @@ pub fn create_issue(
     let url = format!("{base_url}/repos/{repo_path}/issues");
     let request_body = serde_json::json!({
         "title": options.title,
-        "body": options.body.unwrap_or_default(),
+        "body": options.body,
     });
     let issue: GiteaIssue = http_client
         .post(&url)
@@ -246,7 +250,7 @@ pub fn create_pr(
         "title": if options.draft { format!("WIP: {}", options.title) } else { options.title.to_string() },
         "head": options.source_branch,
         "base": options.target_branch,
-        "body": options.body.unwrap_or_default(),
+        "body": options.body,
     });
 
     let pr: GiteaPullRequest = http_client

@@ -7,6 +7,7 @@
     "author": {
       "username": "alice"
     },
+    "assignees": [{ "username": "bob" }],
     "web_url": "http://localhost:3002/user/repo/-/issues/1"
   },
   {
@@ -17,6 +18,7 @@
     "author": {
       "username": "bob"
     },
+    "assignees": [{ "username": "alice" }],
     "web_url": "http://localhost:3002/user/repo/-/issues/2"
   },
   {
@@ -27,6 +29,7 @@
     "author": {
       "username": "alice"
     },
+    "assignees": [{ "username": "charlie" }],
     "web_url": "http://localhost:3002/user/repo/-/issues/3"
   },
   {
@@ -37,6 +40,7 @@
     "author": {
       "username": "charlie"
     },
+    "assignees": [{ "username": "bob" }],
     "web_url": "http://localhost:3002/user/repo/-/issues/4"
   },
   {
@@ -47,6 +51,7 @@
     "author": {
       "username": "alice"
     },
+    "assignees": [],
     "web_url": "http://localhost:3002/user/repo/-/issues/5"
   },
   {
@@ -57,6 +62,7 @@
     "author": {
       "username": "bob"
     },
+    "assignees": [{ "username": "alice" }],
     "web_url": "http://localhost:3002/user/repo/-/issues/6"
   },
   {
@@ -67,6 +73,7 @@
     "author": {
       "username": "charlie"
     },
+    "assignees": [],
     "web_url": "http://localhost:3002/user/repo/-/issues/7"
   },
   {
@@ -77,6 +84,7 @@
     "author": {
       "username": "alice"
     },
+    "assignees": [{ "username": "bob" }],
     "web_url": "http://localhost:3002/user/repo/-/issues/8"
   },
   {
@@ -87,6 +95,7 @@
     "author": {
       "username": "bob"
     },
+    "assignees": [],
     "web_url": "http://localhost:3002/user/repo/-/issues/9"
   },
   {
@@ -97,6 +106,7 @@
     "author": {
       "username": "charlie"
     },
+    "assignees": [{ "username": "alice" }],
     "web_url": "http://localhost:3002/user/repo/-/issues/10"
   }
 ]

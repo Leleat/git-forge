@@ -18,6 +18,7 @@ interface Issue {
     state: string;
     labels: Label[];
     user: User;
+    assignee: User | null;
     html_url: string;
 }
 
@@ -62,6 +63,7 @@ export function createGitHubServer(): express.Express {
                 state,
                 labels,
                 creator,
+                assignee,
                 page = "1",
                 per_page = "30",
             } = req.query;
@@ -90,6 +92,16 @@ export function createGitHubServer(): express.Express {
                 filtered = filtered.filter(
                     (issue) => issue.user.login === creator,
                 );
+            }
+
+            // Filter by assignee
+            if (assignee) {
+                filtered = filtered.filter((issue) => {
+                    return (
+                        "assignee" in issue &&
+                        issue.assignee?.login === assignee
+                    );
+                });
             }
 
             // Pagination
@@ -199,6 +211,7 @@ export function createGitHubServer(): express.Express {
                 state: "open",
                 labels: [],
                 user: { login: "test-user" },
+                assignee: null,
                 html_url: `http://localhost:${GITHUB_PORT}/${owner}/${repo}/issues/${issueNumber}`,
             };
 

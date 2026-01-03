@@ -14,6 +14,7 @@ interface Issue {
     state: string;
     labels: string[];
     author: Author;
+    assignees: Author[];
     web_url: string;
 }
 
@@ -55,6 +56,7 @@ export function createGitLabServer(): express.Express {
             const {
                 state,
                 labels,
+                assignee_username,
                 author_username,
                 page = "1",
                 per_page = "30",
@@ -74,6 +76,15 @@ export function createGitLabServer(): express.Express {
                 filtered = filtered.filter((issue) =>
                     requestedLabels.every((label) =>
                         issue.labels.includes(label),
+                    ),
+                );
+            }
+
+            // Filter by assignee
+            if (assignee_username) {
+                filtered = filtered.filter((issue) =>
+                    issue.assignees.some(
+                        (a) => a.username === assignee_username,
                     ),
                 );
             }
@@ -220,6 +231,7 @@ export function createGitLabServer(): express.Express {
                 state: "opened",
                 labels: [],
                 author: { username: "test-user" },
+                assignees: [],
                 web_url: `http://localhost:${GITLAB_PORT}/user/repo/-/issues/${issueIid}`,
             };
 

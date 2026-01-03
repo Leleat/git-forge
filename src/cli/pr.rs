@@ -1,10 +1,14 @@
 //! The `pr` subcommand.
 
 use anyhow::Context;
-use clap::{ArgAction, Args, Subcommand};
+use clap::{Args, Subcommand};
+use dialoguer::Input;
 
 use crate::{
-    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+    cli::{
+        forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+        input,
+    },
     git::{self, GitRemoteData},
 };
 
@@ -77,13 +81,17 @@ pub struct PrCreateCommandArgs {
     #[arg(long)]
     draft: bool,
 
+    /// Open your text editor to write the pr message
+    #[arg(short, long)]
+    editor: bool,
+
     /// Don't open the issue in the browser after creation
     #[arg(short, long)]
     no_browser: bool,
 
-    /// Push branch to remote
-    #[arg(long, default_value = "true", action = ArgAction::Set)]
-    push: bool,
+    /// Don't push the branch. Expect the branch to already exist at the remote.
+    #[arg(long)]
+    no_push: bool,
 
     /// Git remote to use
     #[arg(long, default_value = "origin")]
@@ -219,7 +227,7 @@ pub struct CreatePrOptions<'a> {
     pub title: &'a str,
     pub source_branch: &'a str,
     pub target_branch: &'a str,
-    pub body: Option<&'a str>,
+    pub body: &'a str,
     pub draft: bool,
 }
 
@@ -314,7 +322,9 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
             .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
     };
 
-    if args.push {
+    if !args.no_push {
+        eprintln!("Pushing branch '{current_branch}'...");
+
         git::push_branch(&current_branch, &args.remote, true)?;
     }
 
@@ -323,11 +333,26 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
         ApiType::GitLab => gitlab::create_pr,
         ApiType::Gitea | ApiType::Forgejo => gitea::create_pr,
     };
+
+    let (title, body) = if args.editor {
+        let message = input::open_text_editor_to_write_message()?;
+
+        (message.title, message.body)
+    } else {
+        (
+            match args.title {
+                Some(t) => t,
+                None => Input::new().with_prompt("Enter PR title").interact_text()?,
+            },
+            args.body.unwrap_or_default(),
+        )
+    };
+
     let create_options = CreatePrOptions {
-        title: &args.title.unwrap_or_else(|| current_branch.clone()),
+        title: &title,
         source_branch: &current_branch,
         target_branch: &target_branch,
-        body: args.body.as_deref(),
+        body: &body,
         draft: args.draft,
     };
     let pr = create_pr(

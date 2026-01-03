@@ -2,9 +2,13 @@
 
 use anyhow::Context;
 use clap::{Args, Subcommand};
+use dialoguer::Input;
 
 use crate::{
-    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+    cli::{
+        forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+        input,
+    },
     git::{self, GitRemoteData},
 };
 
@@ -50,7 +54,11 @@ pub struct IssueListCommandArgs {
     #[arg(long)]
     auth: bool,
 
-    #[arg(long, help = "Filter by author username")]
+    /// Filter by assignee
+    #[arg(long, value_name = "USERNAME")]
+    assignee: Option<String>,
+
+    #[arg(long, value_name = "USERNAME", help = "Filter by author")]
     author: Option<String>,
 
     /// Columns to include in TSV output (comma-separated)
@@ -97,6 +105,10 @@ pub struct IssueCreateCommandArgs {
     /// Issue description
     #[arg(short, long)]
     body: Option<String>,
+
+    /// Open your text editor to write the issue message
+    #[arg(short, long)]
+    editor: bool,
 
     /// Don't open the issue in the browser after creation
     #[arg(short, long)]
@@ -158,6 +170,7 @@ pub struct Issue {
 }
 
 pub struct ListIssueFilters<'a> {
+    pub assignee: Option<&'a str>,
     pub author: Option<&'a str>,
     pub labels: &'a [String],
     pub page: u32,
@@ -167,7 +180,7 @@ pub struct ListIssueFilters<'a> {
 
 pub struct CreateIssueOptions<'a> {
     pub title: &'a str,
-    pub body: Option<&'a str>,
+    pub body: &'a str,
 }
 
 // =============================================================================
@@ -193,6 +206,7 @@ pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
             &api_type,
             args.api_url.as_deref(),
             &ListIssueFilters {
+                assignee: args.assignee.as_deref(),
                 author: args.author.as_deref(),
                 labels: &args.labels,
                 page: args.page,
@@ -215,23 +229,35 @@ pub fn create_issue(args: IssueCreateCommandArgs) -> anyhow::Result<()> {
     };
 
     if args.web {
-        create_issue_via_browser(&remote, &api_type)
-    } else {
-        let Some(title) = args.title else {
-            anyhow::bail!("--title is required when creating an issue with the CLI");
-        };
+        return create_issue_via_browser(&remote, &api_type);
+    }
 
-        create_issue_via_api(
+    if args.editor {
+        return create_issue_with_text_editor(
             &remote,
             &api_type,
             args.api_url.as_deref(),
-            &CreateIssueOptions {
-                title: &title,
-                body: args.body.as_deref(),
-            },
             args.no_browser,
-        )
+        );
     }
+
+    let title = match args.title {
+        Some(t) => t,
+        None => Input::new()
+            .with_prompt("Enter issue title")
+            .interact_text()?,
+    };
+
+    create_issue_via_api(
+        &remote,
+        &api_type,
+        args.api_url.as_deref(),
+        &CreateIssueOptions {
+            title: &title,
+            body: &args.body.unwrap_or_default(),
+        },
+        args.no_browser,
+    )
 }
 
 // =============================================================================
@@ -292,6 +318,26 @@ fn create_issue_via_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyho
     open::that(url)?;
 
     Ok(())
+}
+
+fn create_issue_with_text_editor(
+    remote: &GitRemoteData,
+    api_type: &ApiType,
+    api_url: Option<&str>,
+    no_browser: bool,
+) -> anyhow::Result<()> {
+    let message = input::open_text_editor_to_write_message()?;
+
+    create_issue_via_api(
+        remote,
+        api_type,
+        api_url,
+        &CreateIssueOptions {
+            title: &message.title,
+            body: &message.body,
+        },
+        no_browser,
+    )
 }
 
 fn create_issue_via_api(
