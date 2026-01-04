@@ -1,8 +1,9 @@
 //! The `issue` subcommand.
 
 use anyhow::Context;
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Input;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     cli::{
@@ -131,7 +132,7 @@ pub struct IssueCreateCommandArgs {
 // Domain Types
 // =============================================================================
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, clap::ValueEnum)]
+#[derive(Clone, Debug, Deserialize, Serialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 #[value(rename_all = "lower")]
 pub enum IssueState {
@@ -153,9 +154,7 @@ impl std::fmt::Display for IssueState {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, clap::ValueEnum)]
-#[serde(rename_all = "lowercase")]
-#[value(rename_all = "lower")]
+#[derive(Clone, Debug, Deserialize, Serialize, ValueEnum)]
 pub enum IssueField {
     Id,
     Title,
@@ -166,6 +165,7 @@ pub enum IssueField {
 }
 
 /// An issue from a git forge.
+#[derive(Serialize)]
 pub struct Issue {
     /// The issue number (e.g., #42).
     pub id: u32,

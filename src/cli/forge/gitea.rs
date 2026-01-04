@@ -1,4 +1,5 @@
 use anyhow::Context;
+use serde::Deserialize;
 
 use crate::{
     cli::{
@@ -18,7 +19,7 @@ const AUTH_SCHEME: &str = "token";
 
 /// Gitea/Forgejo API response for issues.
 /// https://docs.gitea.com/api/#tag/issue/operation/issueSearchIssues
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GiteaIssue {
     number: u32,
     title: String,
@@ -42,22 +43,22 @@ impl From<GiteaIssue> for Issue {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GiteaLabel {
     name: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GiteaUser {
     login: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GiteaIssuePrField {}
 
 /// Gitea/Forgejo API response for pull requests.
 /// https://docs.gitea.com/api/#tag/repository/operation/repoNewPinAllowed
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GiteaPullRequest {
     number: u32,
     title: String,
@@ -95,7 +96,7 @@ impl From<GiteaPullRequest> for Pr {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GiteaPrRef {
     #[serde(rename = "ref")]
     ref_name: String,

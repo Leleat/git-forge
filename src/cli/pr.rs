@@ -1,8 +1,9 @@
 //! The `pr` subcommand.
 
 use anyhow::Context;
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Input;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     cli::{
@@ -164,8 +165,7 @@ pub struct PrListCommandArgs {
 // Domain Types
 // =============================================================================
 
-#[derive(Clone, clap::ValueEnum, serde::Serialize)]
-#[value(rename_all = "lower")]
+#[derive(Clone, ValueEnum, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PrState {
     /// Open pull requests that haven't been closed or merged.
@@ -189,7 +189,7 @@ impl std::fmt::Display for PrState {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, clap::ValueEnum)]
+#[derive(Clone, Debug, Deserialize, Serialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 #[value(rename_all = "lower")]
 pub enum PrField {
@@ -206,6 +206,7 @@ pub enum PrField {
     Draft,
 }
 
+#[derive(Serialize)]
 pub struct Pr {
     /// The pull request number (e.g., #42).
     pub id: u32,

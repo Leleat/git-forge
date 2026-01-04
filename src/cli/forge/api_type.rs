@@ -1,4 +1,6 @@
-#[derive(Clone, Copy, Debug, PartialEq, clap::ValueEnum)]
+use clap::ValueEnum;
+
+#[derive(Clone, Copy, Debug, PartialEq, ValueEnum)]
 #[value(rename_all = "lowercase")]
 pub enum ApiType {
     GitHub,
