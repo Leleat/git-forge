@@ -6,11 +6,9 @@ use dialoguer::Input;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::{
-        forge::{self, ApiType, HttpClient, gitea, github, gitlab},
-        input,
-    },
+    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
     git::{self, GitRemoteData},
+    io::{self, OutputFormat},
 };
 
 // =============================================================================
@@ -65,6 +63,10 @@ pub struct IssueListCommandArgs {
     /// Fields to include in output (comma-separated)
     #[arg(short, long, value_delimiter = ',')]
     fields: Vec<IssueField>,
+
+    /// Output format
+    #[arg(long, default_value = "tsv")]
+    format: OutputFormat,
 
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
@@ -133,8 +135,7 @@ pub struct IssueCreateCommandArgs {
 // =============================================================================
 
 #[derive(Clone, Debug, Deserialize, Serialize, ValueEnum)]
-#[serde(rename_all = "lowercase")]
-#[value(rename_all = "lower")]
+#[serde(rename_all = "snake_case")]
 pub enum IssueState {
     /// Open issues that haven't been closed yet.
     Open,
@@ -155,6 +156,7 @@ impl std::fmt::Display for IssueState {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
 pub enum IssueField {
     Id,
     Title,
@@ -226,6 +228,7 @@ pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
                 state: &args.state.unwrap_or(IssueState::Open),
             },
             args.fields,
+            &args.format,
             args.auth,
         )
     }
@@ -294,6 +297,7 @@ fn list_issues_to_stdout(
     api_url: Option<&str>,
     filters: &ListIssueFilters,
     fields: Vec<IssueField>,
+    output_format: &OutputFormat,
     use_auth: bool,
 ) -> anyhow::Result<()> {
     let get_issues = match api_type {
@@ -304,17 +308,14 @@ fn list_issues_to_stdout(
     let issues = get_issues(&HttpClient::new(), remote, api_url, filters, use_auth)
         .context("Failed fetching issues")?;
 
-    let output = format_issues_to_tsv(
-        &issues,
-        if fields.is_empty() {
-            vec![IssueField::Id, IssueField::Title, IssueField::Url]
-        } else {
-            fields
-        },
-    );
+    let fields = if fields.is_empty() {
+        vec![IssueField::Title, IssueField::Id, IssueField::Url]
+    } else {
+        fields
+    };
 
-    if !output.is_empty() {
-        println!("{output}");
+    if !issues.is_empty() {
+        println!("{}", io::format(&issues, &fields, output_format)?);
     }
 
     Ok(())
@@ -338,7 +339,7 @@ fn create_issue_with_text_editor(
     api_url: Option<&str>,
     no_browser: bool,
 ) -> anyhow::Result<()> {
-    let message = input::open_text_editor_to_write_message()?;
+    let message = io::prompt_with_text_editor()?;
 
     if message.title.is_empty() {
         anyhow::bail!("Title cannot be empty.");
@@ -378,38 +379,4 @@ fn create_issue_via_api(
     }
 
     Ok(())
-}
-
-fn format_issues_to_tsv(issues: &[Issue], fields: Vec<IssueField>) -> String {
-    issues
-        .iter()
-        .map(|issue| {
-            fields
-                .iter()
-                .map(|f| get_field_value_for_issue(f, issue))
-                .collect::<Vec<String>>()
-                .join("\t")
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
-}
-
-fn get_field_value_for_issue(field: &IssueField, issue: &Issue) -> String {
-    match field {
-        IssueField::Id => issue.id.to_string(),
-        IssueField::Title => escape_tsv(&issue.title),
-        IssueField::State => issue.state.to_string(),
-        IssueField::Labels => escape_tsv(&issue.labels.join(",")),
-        IssueField::Author => escape_tsv(&issue.author),
-        IssueField::Url => issue.url.clone(),
-    }
-}
-
-fn escape_tsv(value: &str) -> String {
-    value
-        .replace('\t', " ")
-        .replace("\r\n", " ")
-        .replace('\n', " ")
-        .trim()
-        .to_string()
 }

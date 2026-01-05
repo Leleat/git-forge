@@ -1,5 +1,6 @@
 mod cli;
 mod git;
+mod io;
 
 use clap::Parser;
 

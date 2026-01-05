@@ -10,12 +10,6 @@ mod forge {
     pub use http_client::HttpClient;
 }
 
-mod input {
-    mod text_editor;
-
-    pub use text_editor::*;
-}
-
 mod browse;
 mod completions;
 mod issue;

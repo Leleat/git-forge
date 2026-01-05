@@ -6,11 +6,9 @@ use dialoguer::Input;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::{
-        forge::{self, ApiType, HttpClient, gitea, github, gitlab},
-        input,
-    },
+    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
     git::{self, GitRemoteData},
+    io::{self, OutputFormat},
 };
 
 // =============================================================================
@@ -136,6 +134,10 @@ pub struct PrListCommandArgs {
     #[arg(long, value_delimiter = ',')]
     fields: Vec<PrField>,
 
+    /// Output format
+    #[arg(long, default_value = "tsv")]
+    format: OutputFormat,
+
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
     labels: Vec<String>,
@@ -190,16 +192,16 @@ impl std::fmt::Display for PrState {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ValueEnum)]
-#[serde(rename_all = "lowercase")]
-#[value(rename_all = "lower")]
+#[serde(rename_all = "snake_case")]
+#[value(rename_all = "snake_case")]
 pub enum PrField {
     Id,
     Title,
     State,
     Labels,
     Author,
-    Created,
-    Updated,
+    CreatedAt,
+    UpdatedAt,
     Url,
     Source,
     Target,
@@ -280,6 +282,7 @@ pub fn list_prs(args: PrListCommandArgs) -> anyhow::Result<()> {
                 draft: args.draft,
             },
             args.fields,
+            &args.format,
             args.auth,
         )
     }
@@ -353,7 +356,7 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
     };
 
     let (title, body) = if args.editor {
-        let message = input::open_text_editor_to_write_message()?;
+        let message = io::prompt_with_text_editor()?;
 
         if message.title.is_empty() {
             anyhow::bail!("Title cannot be empty.");
@@ -415,6 +418,7 @@ fn list_prs_to_stdout(
     api_url: Option<&str>,
     filters: &ListPrsFilters,
     fields: Vec<PrField>,
+    output_format: &OutputFormat,
     use_auth: bool,
 ) -> anyhow::Result<()> {
     let get_prs = match api_type {
@@ -424,56 +428,15 @@ fn list_prs_to_stdout(
     };
     let prs = get_prs(&HttpClient::new(), remote, api_url, filters, use_auth)?;
 
-    let output = format_prs_to_tsv(
-        &prs,
-        if fields.is_empty() {
-            vec![PrField::Id, PrField::Title, PrField::Url]
-        } else {
-            fields
-        },
-    );
+    let fields = if fields.is_empty() {
+        vec![PrField::Title, PrField::Id, PrField::Url]
+    } else {
+        fields
+    };
 
-    if !output.is_empty() {
-        println!("{output}");
+    if !prs.is_empty() {
+        println!("{}", io::format(&prs, &fields, output_format)?);
     }
 
     Ok(())
-}
-
-fn format_prs_to_tsv(prs: &[Pr], fields: Vec<PrField>) -> String {
-    prs.iter()
-        .map(|pr| {
-            fields
-                .iter()
-                .map(|f| get_field_value_for_pr(f, pr))
-                .collect::<Vec<String>>()
-                .join("\t")
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
-}
-
-fn get_field_value_for_pr(field: &PrField, pr: &Pr) -> String {
-    match field {
-        PrField::Id => pr.id.to_string(),
-        PrField::Title => escape_tsv(&pr.title),
-        PrField::State => pr.state.clone(),
-        PrField::Labels => escape_tsv(&pr.labels.join(",")),
-        PrField::Author => escape_tsv(&pr.author),
-        PrField::Created => pr.created_at.clone(),
-        PrField::Updated => pr.updated_at.clone(),
-        PrField::Url => pr.url.clone(),
-        PrField::Source => pr.source_branch.clone(),
-        PrField::Target => pr.target_branch.clone(),
-        PrField::Draft => (if pr.draft { "true" } else { "false" }).to_string(),
-    }
-}
-
-fn escape_tsv(value: &str) -> String {
-    value
-        .replace('\t', " ")
-        .replace("\r\n", " ")
-        .replace('\n', " ")
-        .trim()
-        .to_string()
 }
