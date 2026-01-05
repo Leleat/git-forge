@@ -340,6 +340,10 @@ fn create_issue_with_text_editor(
 ) -> anyhow::Result<()> {
     let message = input::open_text_editor_to_write_message()?;
 
+    if message.title.is_empty() {
+        anyhow::bail!("Title cannot be empty.");
+    }
+
     create_issue_via_api(
         remote,
         api_type,

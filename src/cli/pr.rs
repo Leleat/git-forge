@@ -355,6 +355,10 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
     let (title, body) = if args.editor {
         let message = input::open_text_editor_to_write_message()?;
 
+        if message.title.is_empty() {
+            anyhow::bail!("Title cannot be empty.");
+        }
+
         (message.title, message.body)
     } else {
         (
