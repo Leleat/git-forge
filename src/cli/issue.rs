@@ -6,7 +6,10 @@ use dialoguer::Input;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+    cli::{
+        config::{Config, MergableWithConfig},
+        forge::{self, ApiType, HttpClient, gitea, github, gitlab},
+    },
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
 };
@@ -16,6 +19,7 @@ use crate::{
 // =============================================================================
 
 const DEFAULT_PER_PAGE: u32 = 30;
+const DEFAULT_REMOTE: &str = "origin";
 
 /// Command-line arguments for the `issue` subcommand.
 #[derive(Args)]
@@ -65,8 +69,8 @@ pub struct IssueListCommandArgs {
     fields: Vec<IssueField>,
 
     /// Output format
-    #[arg(long, default_value = "tsv")]
-    format: OutputFormat,
+    #[arg(long)]
+    format: Option<OutputFormat>,
 
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
@@ -77,12 +81,12 @@ pub struct IssueListCommandArgs {
     page: u32,
 
     /// Number of issues per page
-    #[arg(long, short_alias = 'l', alias = "limit", default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
-    per_page: u32,
+    #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
+    per_page: Option<u32>,
 
     /// Git remote to use
-    #[arg(long, default_value = "origin")]
-    remote: String,
+    #[arg(long)]
+    remote: Option<String>,
 
     /// Filter by state
     #[arg(long)]
@@ -91,6 +95,42 @@ pub struct IssueListCommandArgs {
     /// Open the issues page in the web browser
     #[arg(short, long)]
     web: bool,
+}
+
+impl MergableWithConfig for IssueListCommandArgs {
+    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
+        if self.api.is_none() {
+            self.api = config.get_enum("issue/list/api", remote);
+        }
+
+        if self.api_url.is_none() {
+            self.api_url = config.get_string("issue/list/api-url", remote);
+        }
+
+        if !self.auth {
+            self.auth = config
+                .get_bool("issue/list/auth", remote)
+                .unwrap_or_default();
+        }
+
+        if self.fields.is_empty() {
+            self.fields = config
+                .get_enum_vec("issue/list/fields", remote)
+                .unwrap_or_default();
+        };
+
+        if self.format.is_none() {
+            self.format = config.get_enum("issue/list/format", remote);
+        }
+
+        if self.per_page.is_none() {
+            self.per_page = config.get_u32("issue/list/per-page", remote);
+        }
+
+        if self.state.is_none() {
+            self.state = config.get_enum("issue/list/state", remote);
+        }
+    }
 }
 
 /// Command-line arguments for creating an issue.
@@ -118,8 +158,8 @@ pub struct IssueCreateCommandArgs {
     no_browser: bool,
 
     /// Git remote to use
-    #[arg(long, default_value = "origin")]
-    remote: String,
+    #[arg(long)]
+    remote: Option<String>,
 
     /// Issue title
     #[arg(short, long)]
@@ -130,14 +170,45 @@ pub struct IssueCreateCommandArgs {
     web: bool,
 }
 
+impl MergableWithConfig for IssueCreateCommandArgs {
+    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
+        if self.api.is_none() {
+            self.api = config.get_enum("issue/create/api", remote);
+        }
+
+        if self.api_url.is_none() {
+            self.api_url = config.get_string("issue/create/api-url", remote);
+        }
+
+        if !self.editor {
+            self.editor = config
+                .get_bool("issue/create/editor", remote)
+                .unwrap_or_default();
+        }
+
+        if !self.no_browser {
+            self.no_browser = config
+                .get_bool("issue/create/no-browser", remote)
+                .unwrap_or_default();
+        }
+
+        if !self.web {
+            self.web = config
+                .get_bool("issue/create/web", remote)
+                .unwrap_or_default();
+        }
+    }
+}
+
 // =============================================================================
 // Domain Types
 // =============================================================================
 
-#[derive(Clone, Debug, Deserialize, Serialize, ValueEnum)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueState {
     /// Open issues that haven't been closed yet.
+    #[default]
     Open,
     /// Closed issues that have been resolved.
     Closed,
@@ -203,9 +274,18 @@ pub struct CreateIssueOptions<'a> {
 
 /// Lists issues from the remote repository's forge and outputs them or
 /// open the issues page in the web browser.
-pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
-    let remote = git::get_remote_data(&args.remote)
-        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
+pub fn list_issues(mut args: IssueListCommandArgs) -> anyhow::Result<()> {
+    let config = Config::load_from_disk().context("Failed to load configuration")?;
+    let remote_name = args.remote.clone().unwrap_or_else(|| {
+        config
+            .get_string("issue/list/remote", None)
+            .unwrap_or(DEFAULT_REMOTE.to_string())
+    });
+    let remote = git::get_remote_data(&remote_name)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
+
+    args.merge_with_config(&config, Some(&remote));
+
     let api_type = match args.api {
         Some(api_type) => api_type,
         None => forge::guess_api_type_from_host(&remote.host)
@@ -224,19 +304,28 @@ pub fn list_issues(args: IssueListCommandArgs) -> anyhow::Result<()> {
                 author: args.author.as_deref(),
                 labels: &args.labels,
                 page: args.page,
-                per_page: args.per_page,
-                state: &args.state.unwrap_or(IssueState::Open),
+                per_page: args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+                state: &args.state.unwrap_or_default(),
             },
             args.fields,
-            &args.format,
+            &args.format.unwrap_or_default(),
             args.auth,
         )
     }
 }
 
-pub fn create_issue(args: IssueCreateCommandArgs) -> anyhow::Result<()> {
-    let remote = git::get_remote_data(&args.remote)
-        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
+pub fn create_issue(mut args: IssueCreateCommandArgs) -> anyhow::Result<()> {
+    let config = Config::load_from_disk().context("Failed to load configuration")?;
+    let remote_name = args.remote.clone().unwrap_or_else(|| {
+        config
+            .get_string("issue/create/remote", None)
+            .unwrap_or(DEFAULT_REMOTE.to_string())
+    });
+    let remote = git::get_remote_data(&remote_name)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
+
+    args.merge_with_config(&config, Some(&remote));
+
     let api_type = match args.api {
         Some(api_type) => api_type,
         None => forge::guess_api_type_from_host(&remote.host)
@@ -252,6 +341,9 @@ pub fn create_issue(args: IssueCreateCommandArgs) -> anyhow::Result<()> {
             &remote,
             &api_type,
             args.api_url.as_deref(),
+            config
+                .get_string_from_global_scope("editor-command")
+                .as_deref(),
             args.no_browser,
         );
     }
@@ -337,9 +429,13 @@ fn create_issue_with_text_editor(
     remote: &GitRemoteData,
     api_type: &ApiType,
     api_url: Option<&str>,
+    editor_command: Option<&str>,
     no_browser: bool,
 ) -> anyhow::Result<()> {
-    let message = io::prompt_with_text_editor()?;
+    let message = match editor_command {
+        Some(cmd) => io::prompt_with_custom_text_editor(cmd),
+        None => io::prompt_with_default_text_editor(),
+    }?;
 
     if message.title.is_empty() {
         anyhow::bail!("Title cannot be empty.");

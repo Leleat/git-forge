@@ -43,8 +43,25 @@ That means, this line will also be part of the description.
 
 /// Opens the default text editor for the user to write a message. The first
 /// line of will be used as the title while the rest will be used for the body.
-pub fn prompt_with_text_editor() -> anyhow::Result<InputMessage> {
-    let Some(file_content) = Editor::new()
+pub fn prompt_with_default_text_editor() -> anyhow::Result<InputMessage> {
+    prompt_with_text_editor(None)
+}
+
+/// Opens the a custom text editor with the provided command for the user to
+/// write a message. The first line of will be used as the title while the rest
+/// will be used for the body.
+pub fn prompt_with_custom_text_editor(cmd: &str) -> anyhow::Result<InputMessage> {
+    prompt_with_text_editor(Some(cmd))
+}
+
+fn prompt_with_text_editor(cmd: Option<&str>) -> anyhow::Result<InputMessage> {
+    let mut editor = Editor::new();
+
+    if let Some(exec) = cmd {
+        editor.executable(exec);
+    }
+
+    let Some(file_content) = editor
         .edit(MESSAGE_TEMPLATE)
         .context("Failed opening text editor to enter message")?
     else {
@@ -71,11 +88,12 @@ pub fn prompt_with_text_editor() -> anyhow::Result<InputMessage> {
 }
 
 /// Output format.
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Debug, Default, ValueEnum)]
 pub enum OutputFormat {
     /// Comma-separated values format.
     Csv,
     /// Tab-separated values format.
+    #[default]
     Tsv,
     /// JSON format.
     Json,
