@@ -113,7 +113,7 @@ describe.each([
         expect(result.stderr).toBeTruthy();
     });
 
-    it("Should list issues with custom columns (id,title)", () => {
+    it("Should list issues with custom fields (id,title)", () => {
         const result = runGitForge({
             args: [
                 "issue",
@@ -122,7 +122,7 @@ describe.each([
                 forge,
                 "--api-url",
                 getApiUrl(forge),
-                "--columns",
+                "--fields",
                 "id,title",
             ],
             cwd: tempDir,
@@ -318,7 +318,7 @@ describe.each([
         expect(parseTSV(result.stdout)).toHaveLength(3);
     });
 
-    it("Should list issues with multiple options combined (auth, columns, labels)", () => {
+    it("Should list issues with multiple options combined (auth, fields, labels)", () => {
         const result = runGitForge({
             args: [
                 "issue",
@@ -328,7 +328,7 @@ describe.each([
                 "--api-url",
                 getApiUrl(forge),
                 "--auth",
-                "--columns",
+                "--fields",
                 "id,title,author",
                 "--labels",
                 "enhancement",

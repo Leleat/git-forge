@@ -1,15 +1,17 @@
 //! The `pr` subcommand.
 
 use anyhow::Context;
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Input;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     cli::{
+        config::{Config, MergableWithConfig},
         forge::{self, ApiType, HttpClient, gitea, github, gitlab},
-        input,
     },
     git::{self, GitRemoteData},
+    io::{self, OutputFormat},
 };
 
 // =============================================================================
@@ -17,6 +19,7 @@ use crate::{
 // =============================================================================
 
 const DEFAULT_PER_PAGE: u32 = 30;
+const DEFAULT_REMOTE: &str = "origin";
 
 /// Command-line arguments for the `pr` subcommand.
 #[derive(Args)]
@@ -37,7 +40,7 @@ pub enum PrCommand {
     #[command(alias = "cr")]
     Create(PrCreateCommandArgs),
 
-    /// List pull requests as TSV.
+    /// List pull requests.
     #[command(alias = "ls")]
     List(PrListCommandArgs),
 }
@@ -58,8 +61,20 @@ pub struct PrCheckoutCommandArgs {
     number: u32,
 
     /// Git remote to use
-    #[arg(long, default_value = "origin")]
-    remote: String,
+    #[arg(long)]
+    remote: Option<String>,
+}
+
+impl MergableWithConfig for PrCheckoutCommandArgs {
+    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
+        if self.api.is_none() {
+            self.api = config.get_enum("pr/checkout/api", remote);
+        }
+
+        if self.api_url.is_none() {
+            self.api_url = config.get_string("pr/checkout/api-url", remote);
+        }
+    }
 }
 
 /// Command-line arguments for creating a new pull request.
@@ -94,8 +109,8 @@ pub struct PrCreateCommandArgs {
     no_push: bool,
 
     /// Git remote to use
-    #[arg(long, default_value = "origin")]
-    remote: String,
+    #[arg(long)]
+    remote: Option<String>,
 
     /// Target branch
     #[arg(long)]
@@ -106,8 +121,48 @@ pub struct PrCreateCommandArgs {
     title: Option<String>,
 }
 
+impl MergableWithConfig for PrCreateCommandArgs {
+    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
+        if self.api.is_none() {
+            self.api = config.get_enum("pr/create/api", remote);
+        }
+
+        if self.api_url.is_none() {
+            self.api_url = config.get_string("pr/create/api-url", remote);
+        }
+
+        if !self.draft {
+            self.draft = config
+                .get_bool("pr/create/draft", remote)
+                .unwrap_or_default();
+        }
+
+        if !self.editor {
+            self.editor = config
+                .get_bool("pr/create/editor", remote)
+                .unwrap_or_default();
+        }
+
+        if !self.no_browser {
+            self.no_browser = config
+                .get_bool("pr/create/no-browser", remote)
+                .unwrap_or_default();
+        }
+
+        if !self.no_push {
+            self.no_push = config
+                .get_bool("pr/create/no-push", remote)
+                .unwrap_or_default();
+        }
+
+        if self.target.is_none() {
+            self.target = config.get_string("pr/create/target", remote);
+        }
+    }
+}
+
 /// Command-line arguments for listing pull requests.
-#[derive(Args)]
+#[derive(Args, Clone)]
 pub struct PrListCommandArgs {
     /// Specify the forge which affects the API schema etc
     #[arg(long, value_name = "TYPE")]
@@ -127,13 +182,17 @@ pub struct PrListCommandArgs {
     #[arg(long)]
     author: Option<String>,
 
-    /// Columns to include in TSV output (comma-separated)
-    #[arg(long, value_delimiter = ',')]
-    columns: Vec<String>,
-
     /// Filter to only draft PRs
     #[arg(long)]
     draft: bool,
+
+    /// Fields to include in output (comma-separated)
+    #[arg(long, value_delimiter = ',')]
+    fields: Vec<PrField>,
+
+    /// Output format
+    #[arg(long)]
+    format: Option<OutputFormat>,
 
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
@@ -144,12 +203,12 @@ pub struct PrListCommandArgs {
     page: u32,
 
     /// Number of PRs per page
-    #[arg(long, short_alias = 'l', alias = "limit", default_value_t = DEFAULT_PER_PAGE, value_name = "NUMBER")]
-    per_page: u32,
+    #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
+    per_page: Option<u32>,
 
     /// Git remote to use
-    #[arg(long, default_value = "origin")]
-    remote: String,
+    #[arg(long)]
+    remote: Option<String>,
 
     /// Filter by state
     #[arg(long)]
@@ -160,15 +219,53 @@ pub struct PrListCommandArgs {
     web: bool,
 }
 
+impl MergableWithConfig for PrListCommandArgs {
+    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
+        if self.api.is_none() {
+            self.api = config.get_enum("pr/list/api", remote);
+        }
+
+        if self.api_url.is_none() {
+            self.api_url = config.get_string("pr/list/api-url", remote);
+        }
+
+        if !self.auth {
+            self.auth = config.get_bool("pr/list/auth", remote).unwrap_or_default();
+        }
+
+        if !self.draft {
+            self.draft = config.get_bool("pr/list/draft", remote).unwrap_or_default();
+        }
+
+        if self.fields.is_empty() {
+            self.fields = config
+                .get_enum_vec("pr/list/fields", remote)
+                .unwrap_or_default();
+        }
+
+        if self.format.is_none() {
+            self.format = config.get_enum("pr/list/format", remote);
+        }
+
+        if self.per_page.is_none() {
+            self.per_page = config.get_u32("pr/list/per-page", remote);
+        }
+
+        if self.state.is_none() {
+            self.state = config.get_enum("pr/list/state", remote);
+        }
+    }
+}
+
 // =============================================================================
 // Domain Types
 // =============================================================================
 
-#[derive(Clone, clap::ValueEnum, serde::Serialize)]
-#[value(rename_all = "lower")]
+#[derive(Clone, Default, ValueEnum, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PrState {
     /// Open pull requests that haven't been closed or merged.
+    #[default]
     Open,
     /// Closed pull requests that were not merged.
     Closed,
@@ -189,6 +286,24 @@ impl std::fmt::Display for PrState {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+#[value(rename_all = "snake_case")]
+pub enum PrField {
+    Id,
+    Title,
+    State,
+    Labels,
+    Author,
+    CreatedAt,
+    UpdatedAt,
+    Url,
+    Source,
+    Target,
+    Draft,
+}
+
+#[derive(Serialize)]
 pub struct Pr {
     /// The pull request number (e.g., #42).
     pub id: u32,
@@ -237,9 +352,18 @@ pub struct CreatePrOptions<'a> {
 
 /// Lists pull requests from the remote repository's forge and outputs them as
 /// TSV or open the prs page in the web browser.
-pub fn list_prs(args: PrListCommandArgs) -> anyhow::Result<()> {
-    let remote = git::get_remote_data(&args.remote)
-        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
+pub fn list_prs(mut args: PrListCommandArgs) -> anyhow::Result<()> {
+    let config = Config::load_from_disk().context("Failed to load configuration")?;
+    let remote_name = args.remote.clone().unwrap_or_else(|| {
+        config
+            .get_string("pr/list/remote", None)
+            .unwrap_or(DEFAULT_REMOTE.to_string())
+    });
+    let remote = git::get_remote_data(&remote_name)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
+
+    args.merge_with_config(&config, Some(&remote));
+
     let api_type = match args.api {
         Some(api_type) => api_type,
         None => forge::guess_api_type_from_host(&remote.host)
@@ -257,19 +381,31 @@ pub fn list_prs(args: PrListCommandArgs) -> anyhow::Result<()> {
                 author: args.author.as_deref(),
                 labels: &args.labels,
                 page: args.page,
-                per_page: args.per_page,
-                state: &args.state.unwrap_or(PrState::Open),
+                per_page: args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+                state: &args.state.unwrap_or_default(),
                 draft: args.draft,
             },
-            args.columns,
+            args.fields,
+            &args.format.unwrap_or_default(),
             args.auth,
         )
     }
 }
 
 /// Checks out a pull request as a local branch.
-pub fn checkout_pr(args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
-    let api_type = match git::get_remote_data(&args.remote) {
+pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
+    let config = Config::load_from_disk().context("Failed to load configuration")?;
+    let remote_name = args.remote.clone().unwrap_or_else(|| {
+        config
+            .get_string("pr/checkout/remote", None)
+            .unwrap_or(DEFAULT_REMOTE.to_string())
+    });
+    let remote_result = git::get_remote_data(&remote_name);
+
+    args.merge_with_config(&config, remote_result.as_ref().ok());
+
+    // Allow remote detection to fail if user provides --api explicitly.
+    let api_type = match remote_result {
         Ok(remote) => forge::guess_api_type_from_host(&remote.host)
             .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
         Err(e) => match args.api {
@@ -289,7 +425,7 @@ pub fn checkout_pr(args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
     let pr_ref = get_pr_ref(pr_number);
     let branch_name = format!("pr-{pr_number}");
 
-    git::fetch_pull_request(&pr_ref, &branch_name, &args.remote)?;
+    git::fetch_pull_request(&pr_ref, &branch_name, &remote_name)?;
     git::checkout_branch(&branch_name)?;
 
     eprintln!("Successfully checked out PR \"{pr_number}\" to branch \"{branch_name}\"");
@@ -298,11 +434,22 @@ pub fn checkout_pr(args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
 }
 
 /// Creates a new pull request from the current branch.
-pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
+pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
+    let config = Config::load_from_disk().context("Failed to load configuration")?;
+    let remote_name = args.remote.clone().unwrap_or_else(|| {
+        config
+            .get_string("pr/create/remote", None)
+            .unwrap_or(DEFAULT_REMOTE.to_string())
+    });
+    let remote = git::get_remote_data(&remote_name)
+        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
+
+    args.merge_with_config(&config, Some(&remote));
+
     let current_branch = git::get_current_branch()?;
     let target_branch = match args.target {
         Some(target) => target,
-        None => git::get_default_branch(&args.remote)
+        None => git::get_default_branch(&remote_name)
             .context("Couldn't create a PR. You can provide a --target explicitly.")?,
     };
 
@@ -314,8 +461,6 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
     }
 
     let http_client = HttpClient::new();
-    let remote = git::get_remote_data(&args.remote)
-        .with_context(|| format!("Failed to parse remote URL for remote '{}'", &args.remote))?;
     let api_type = match args.api {
         Some(api_type) => api_type,
         None => forge::guess_api_type_from_host(&remote.host)
@@ -325,7 +470,7 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
     if !args.no_push {
         eprintln!("Pushing branch '{current_branch}'...");
 
-        git::push_branch(&current_branch, &args.remote, true)?;
+        git::push_branch(&current_branch, &remote_name, true)?;
     }
 
     let create_pr = match api_type {
@@ -335,7 +480,14 @@ pub fn create_pr(args: PrCreateCommandArgs) -> anyhow::Result<()> {
     };
 
     let (title, body) = if args.editor {
-        let message = input::open_text_editor_to_write_message()?;
+        let message = match config.get_string_from_global_scope("editor-command") {
+            Some(cmd) => io::prompt_with_custom_text_editor(&cmd),
+            None => io::prompt_with_default_text_editor(),
+        }?;
+
+        if message.title.is_empty() {
+            anyhow::bail!("Title cannot be empty.");
+        }
 
         (message.title, message.body)
     } else {
@@ -392,7 +544,8 @@ fn list_prs_to_stdout(
     api_type: &ApiType,
     api_url: Option<&str>,
     filters: &ListPrsFilters,
-    columns: Vec<String>,
+    fields: Vec<PrField>,
+    output_format: &OutputFormat,
     use_auth: bool,
 ) -> anyhow::Result<()> {
     let get_prs = match api_type {
@@ -402,57 +555,15 @@ fn list_prs_to_stdout(
     };
     let prs = get_prs(&HttpClient::new(), remote, api_url, filters, use_auth)?;
 
-    let output = format_prs_to_tsv(
-        &prs,
-        if columns.is_empty() {
-            vec!["id".to_string(), "title".to_string(), "url".to_string()]
-        } else {
-            columns
-        },
-    );
+    let fields = if fields.is_empty() {
+        vec![PrField::Title, PrField::Id, PrField::Url]
+    } else {
+        fields
+    };
 
-    if !output.is_empty() {
-        println!("{output}");
+    if !prs.is_empty() {
+        println!("{}", io::format(&prs, &fields, output_format)?);
     }
 
     Ok(())
-}
-
-fn format_prs_to_tsv(prs: &[Pr], columns: Vec<String>) -> String {
-    prs.iter()
-        .map(|pr| {
-            columns
-                .iter()
-                .map(|col| get_column_value_for_pr(col, pr))
-                .collect::<Vec<String>>()
-                .join("\t")
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
-}
-
-fn get_column_value_for_pr(column: &str, pr: &Pr) -> String {
-    match column {
-        "id" => pr.id.to_string(),
-        "title" => escape_tsv(&pr.title),
-        "state" => pr.state.clone(),
-        "labels" => escape_tsv(&pr.labels.join(",")),
-        "author" => escape_tsv(&pr.author),
-        "created" => pr.created_at.clone(),
-        "updated" => pr.updated_at.clone(),
-        "url" => pr.url.clone(),
-        "source" => pr.source_branch.clone(),
-        "target" => pr.target_branch.clone(),
-        "draft" => (if pr.draft { "true" } else { "false" }).to_string(),
-        _ => String::new(),
-    }
-}
-
-fn escape_tsv(value: &str) -> String {
-    value
-        .replace('\t', " ")
-        .replace("\r\n", " ")
-        .replace('\n', " ")
-        .trim()
-        .to_string()
 }

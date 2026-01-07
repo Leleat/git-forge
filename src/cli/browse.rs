@@ -6,9 +6,14 @@ use anyhow::Context;
 use clap::Args;
 
 use crate::{
-    cli::forge::{self, ApiType, gitea, github, gitlab},
+    cli::{
+        config::{Config, MergableWithConfig},
+        forge::{self, ApiType, gitea, github, gitlab},
+    },
     git::{self, GitRemoteData},
 };
+
+const DEFAULT_REMOTE: &str = "origin";
 
 // =============================================================================
 // CLI Arguments
@@ -43,8 +48,22 @@ pub struct BrowseCommandArgs {
     prs: Option<Option<u32>>,
 
     /// Git remote to use
-    #[arg(long, default_value = "origin")]
-    remote: String,
+    #[arg(long)]
+    remote: Option<String>,
+}
+
+impl MergableWithConfig for BrowseCommandArgs {
+    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
+        if self.api.is_none() {
+            self.api = config.get_enum("browse/api", remote);
+        }
+
+        if !self.no_browser {
+            self.no_browser = config
+                .get_bool("browse/no-browser", remote)
+                .unwrap_or_default();
+        }
+    }
 }
 
 // =============================================================================
@@ -53,9 +72,18 @@ pub struct BrowseCommandArgs {
 
 /// Execute the `browse` subcommand and either opens a repository link in the
 /// browser or prints it to stdout.
-pub fn browse_repository(args: BrowseCommandArgs) -> anyhow::Result<()> {
-    let remote = git::get_remote_data(&args.remote)
-        .with_context(|| format!("Failed to get remote URL for remote '{}'", &args.remote))?;
+pub fn browse_repository(mut args: BrowseCommandArgs) -> anyhow::Result<()> {
+    let config = Config::load_from_disk().context("Failed to load configuration")?;
+    let remote_name = args.remote.clone().unwrap_or_else(|| {
+        config
+            .get_string("browse/remote", None)
+            .unwrap_or(DEFAULT_REMOTE.to_string())
+    });
+    let remote = git::get_remote_data(&remote_name)
+        .with_context(|| format!("Failed to get remote URL for remote '{}'", &remote_name))?;
+
+    args.merge_with_config(&config, Some(&remote));
+
     let api_type = match args.api {
         Some(api_type) => api_type,
         None => forge::guess_api_type_from_host(&remote.host)
@@ -72,15 +100,15 @@ pub fn browse_repository(args: BrowseCommandArgs) -> anyhow::Result<()> {
         );
     }
 
-    if let Some(issues) = args.issues {
-        return match issues {
+    if let Some(issue_number) = args.issues {
+        return match issue_number {
             Some(issue_number) => browse_issue(&remote, &api_type, issue_number, args.no_browser),
             None => browse_issues(&remote, &api_type, args.no_browser),
         };
     }
 
-    if let Some(prs) = args.prs {
-        return match prs {
+    if let Some(pr_number) = args.prs {
+        return match pr_number {
             Some(pr_number) => browse_pr(&remote, &api_type, pr_number, args.no_browser),
             None => browse_prs(&remote, &api_type, args.no_browser),
         };

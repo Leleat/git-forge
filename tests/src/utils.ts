@@ -166,7 +166,7 @@ interface TsvRow {
 
 export function parseTSV(
     output: string,
-    columns: string[] = ["id", "title", "url"],
+    fields: string[] = ["id", "title", "url"],
 ): TsvRow[] {
     if (!output.trim()) {
         return [];
@@ -176,7 +176,7 @@ export function parseTSV(
         const values = line.split("\t");
         const row: TsvRow = {};
 
-        columns.forEach((col, index) => {
+        fields.forEach((col, index) => {
             row[col] = values[index] || "";
         });
 

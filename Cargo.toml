@@ -1,14 +1,20 @@
 [package]
 name = "git-forge"
 version = "0.1.0"
-description = "Tool for basic interactions with git forges"
 edition = "2024"
+description = "Tool for basic interactions with git forges"
+readme = "README.md"
+repository = "https://github.com/Leleat/git-forge"
 license = "MIT"
+keywords = ["git", "cli"]
+categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0.100"
 clap = { version = "4.5.53", features = ["derive", "wrap_help"] }
 clap_complete = "4.5.63"
+confy = "2.0.0"
+csv = "1.4.0"
 dialoguer = "0.12.0"
 open = "5.3.3"
 reqwest = { version = "0.12.26", features = ["blocking", "json"] }

@@ -126,7 +126,7 @@ describe.each([
         expect(result.stderr).toBeTruthy();
     });
 
-    it("Should list pull requests with custom columns (id,url)", () => {
+    it("Should list pull requests with custom fields (id,url)", () => {
         const result = runGitForge({
             args: [
                 "pr",
@@ -135,7 +135,7 @@ describe.each([
                 forge,
                 "--api-url",
                 getApiUrl(forge),
-                "--columns",
+                "--fields",
                 "id,url",
             ],
             cwd: tempDir,
@@ -329,7 +329,7 @@ describe.each([
         expect(parseTSV(result.stdout)).toHaveLength(1);
     });
 
-    it("Should list pull requests with multiple options combined (auth, columns, labels)", () => {
+    it("Should list pull requests with multiple options combined (auth, fields, labels)", () => {
         const result = runGitForge({
             args: [
                 "pr",
@@ -339,7 +339,7 @@ describe.each([
                 "--api-url",
                 getApiUrl(forge),
                 "--auth",
-                "--columns",
+                "--fields",
                 "id,title,draft",
                 "--labels",
                 "enhancement",

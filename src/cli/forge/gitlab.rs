@@ -1,4 +1,5 @@
 use anyhow::Context;
+use serde::Deserialize;
 use url::form_urlencoded::byte_serialize;
 
 use crate::{
@@ -19,7 +20,7 @@ const AUTH_SCHEME: &str = "Bearer";
 
 /// GitLab API response for issues.
 /// https://docs.gitlab.com/api/issues/#list-project-issues
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GitLabIssue {
     iid: u32,
     title: String,
@@ -50,14 +51,14 @@ impl From<GitLabIssue> for Issue {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GitLabUser {
     username: String,
 }
 
 /// GitLab API response for pull requests.
 /// https://docs.gitlab.com/api/merge_requests/#list-project-merge-requests
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Deserialize)]
 struct GitLabMergeRequest {
     iid: u32,
     title: String,
