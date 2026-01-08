@@ -3,6 +3,61 @@ run-name: Check ${{ github.ref_name }} by @${{ github.actor }}
 on: pull_request
 
 jobs:
+  check-commit-messages:
+    name: Check commit messages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          set -e
+
+          BASE_REF="${{ github.base_ref }}"
+
+          echo "Checking commits from origin/$BASE_REF to HEAD"
+
+          COMMITS=$(git log origin/$BASE_REF..HEAD --no-merges --format="%H %s")
+          PATTERN="^(feat|fix|chore|docs|refactor|test|ci|perf|style|build|revert)(\([^)]*\))?!?: .+"
+          INVALID_COMMITS=""
+
+          while IFS= read -r line; do
+            if [ -z "$line" ]; then
+              continue
+            fi
+
+            HASH=$(echo "$line" | cut -d' ' -f1)
+            MESSAGE=$(echo "$line" | cut -d' ' -f2-)
+
+            # Skip merge commits
+            if [[ "$MESSAGE" =~ ^Merge ]]; then
+              continue
+            fi
+
+            # Check if message matches conventional commit format
+            if ! echo "$MESSAGE" | grep -qE "$PATTERN"; then
+              echo "✗ Invalid commit message format: $HASH"
+              echo "  Message: $MESSAGE"
+              INVALID_COMMITS="$INVALID_COMMITS\n  - $HASH: $MESSAGE"
+            fi
+          done <<< "$COMMITS"
+
+          if [ -n "$INVALID_COMMITS" ]; then
+            echo ""
+            echo "ERROR: The following commits do not follow Conventional Commits format:"
+            echo -e "$INVALID_COMMITS"
+            echo ""
+            echo "Commit messages must follow the pattern:"
+            echo "  type(optional-scope): description"
+            echo ""
+            echo "Valid types: feat, fix, chore, docs, refactor, test, ci, perf, style, build, revert"
+            echo "For breaking changes, add '!' after the type/scope."
+            exit 1
+          fi
+
   lint:
     name: Run linters
     runs-on: ubuntu-latest
