@@ -127,14 +127,19 @@ _git_forge() {
 
 ## Installation
 
-Clone the repository. Then run
+Download the appropriate [release](https://github.com/Leleat/git-forge/releases) for your system. Rename the downloaded file to `git-forge`, make it executable, and move it into a `$PATH` directory.
+
+### Manual Build
+
+Alternatively, you can build the project manually.
+
+First clone the git repository. Then open a terminal and `cd` into the cloned directory. Then run
 
 ```sh
-# First, cd into the <GIT_REPO>
 cargo build --release
 ```
 
-Move `target/release/git-forge` to a `$PATH` directory.
+Make `target/release/git-forge` executable and move it to a `$PATH` directory.
 
 ## Support Me
 
