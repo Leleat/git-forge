@@ -11,25 +11,74 @@ A simple CLI tool for basic interactions with issues and pull requests across Gi
 git forge [<subcommand>] [<options>]
 ```
 
-### Subcommands
-
-- `issue` - List issues
-- `pr` - List pull requests, create a pull request, and checkout a pull request
-- `browse` - Open repository links in your browser or print them to stdout (repository home, issues, PRs, commits, files)
-- `completions` - generate shell completions. See [limitations](#shell-completions) below.
-
 Note that due to differing forge APIs, some behavior may vary across forges. E.g. filtering of PRs may happen client-side for some forges, while it happens server-side for others.
 
-### Example Use Cases
+### Subcommands
 
 ```sh
-# git aliases in .gitconfig
-[alias]
-    # Search for and copy an issue link to clipboard. `copy` is a custom script
-    fcpissue = "!git forge issue list | fzf | cut -f 3 | copy"
-    # Search for a PR and check it out locally
-    freviewpr = "!git forge pr list | fzf | cut -f 1 | xargs git forge pr checkout"
+# git forge -h
+browse       Open repository links in your browser or print them to stdout
+completions  Generate shell completions # See limitations below
+config       Manage configuration settings
+issue        List issues from the remote repository
+pr           Interact with pull requests
 ```
+
+```sh
+# git forge browse -h
+Open repository links in your browser or print them to stdout
+
+Usage: git-forge browse [OPTIONS] [<PATH[:<LINE_NUMBER>]>]
+
+Arguments:
+  [<PATH[:<LINE_NUMBER>]>]  The file or directory to open
+
+Options:
+  -c, --commit <COMMIT_ISH>  Open this commit-ish. If <PATH> is provided, open the file at this commit-ish
+  -i, --issues [<NUMBER>]    Open the issues page. If <NUMBER> is provided, open that specific issue
+  -n, --no-browser           Instead of opening the URL in your browser, print it to stdout
+  -p, --prs [<NUMBER>]       Open the PR page. If <NUMBER> is provided, open that specific pr
+```
+
+```sh
+# git forge config -h
+Manage configuration settings. Currently supported settings:
+
+  - editor-command: This command will be called instead of the default text editor when using the --editor flag. E.g. for vscode use `code --wait`
+  - <CLI_OPTIONS>: Most CLI options can be configured with a scoped default setting. See the config subcommands' help for more details.
+
+Usage: git-forge config <COMMAND>
+
+Commands:
+  get    Get configuration value(s)
+  set    Set a configuration value
+  unset  Unset a configuration value
+  edit   Edit the configuration file
+```
+
+```sh
+# git forge issue -h
+Interact with issues
+
+Usage: git-forge issue <COMMAND>
+
+Commands:
+  list    List issues
+  create  Create an issue and open it in the web browser
+```
+
+```sh
+# git forge pr -h
+Interact with pull requests
+
+Usage: git-forge pr <COMMAND>
+
+Commands:
+  checkout  Checkout a pull request locally
+  create    Create a new pull request from the current branch and open the pull request in the web browser
+  list      List pull requests
+```
+
 
 ### Shell Completions
 

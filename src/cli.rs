@@ -43,20 +43,17 @@ pub enum GitForgeCommand {
     Browse(BrowseCommandArgs),
 
     /// Generate shell completions.
-    #[command(alias = "c")]
     Completions(CompletionsCommandArgs),
 
-    #[command(about = "
-Manage configuration settings.
-
-Currently supported settings:
+    #[command(about = "Manage configuration settings. Currently supported settings:
 
   - editor-command: This command will be called instead of the default text editor when using the --editor flag. E.g. for vscode use `code --wait`
   - <CLI_OPTIONS>: Most CLI options can be configured with a scoped default setting. See the config subcommands' help for more details.
     ")]
+    #[command(alias = "c")]
     Config(ConfigCommandArgs),
 
-    /// List issues from the remote repository.
+    /// Interact with issues.
     #[command(alias = "i")]
     Issue(IssueCommandArgs),
 
