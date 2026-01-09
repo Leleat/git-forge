@@ -1,0 +1,189 @@
+name: Release
+run-name: Release ${{ github.ref_name }} by @${{ github.actor }}
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  validate-version:
+    name: Validate version number
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Extract version from tag
+        id: extract
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          VERSION="${TAG_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Tag: $TAG_NAME"
+          echo "Version: $VERSION"
+
+      - name: Verify version matches Cargo.toml
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+
+          if ! grep -q "^version = \"$VERSION\"$" Cargo.toml; then
+            echo "Tag has version $VERSION but Cargo.toml doesn't" >&2
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: validate-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: false
+
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+
+          # Mac
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+            cross: false
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            cross: false
+
+          # Windows
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cross: false
+
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            cross: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install cross
+        if: matrix.cross
+        # Mostly copied from ripgrep
+        run: |
+          mkdir -p "$RUNNER_TEMP/cross-download"
+          cd "$RUNNER_TEMP/cross-download"
+          curl -LO "https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-musl.tar.gz"
+          tar xf cross-x86_64-unknown-linux-musl.tar.gz
+          echo "$RUNNER_TEMP/cross-download" >> $GITHUB_PATH
+
+      - name: Build binary
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
+
+      - name: Prepare artifact
+        run: |
+          cd target/${{ matrix.target }}/release
+          VERSION="${{ needs.validate-version.outputs.version }}"
+
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            BINARY_NAME="git-forge.exe"
+            ARTIFACT_NAME="git-forge-${VERSION}-${{ matrix.target }}.exe"
+          else
+            BINARY_NAME="git-forge"
+            ARTIFACT_NAME="git-forge-${VERSION}-${{ matrix.target }}"
+          fi
+
+          mv "$BINARY_NAME" "$ARTIFACT_NAME"
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
+        shell: bash
+
+      - name: Smoke test binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          ./${{ env.ARTIFACT_NAME }} --version
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: binary-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ env.ARTIFACT_NAME }}
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [validate-version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          path: artifacts
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${{ needs.validate-version.outputs.version }}"
+
+          # Extract the latest changelog entry (between first and second version headers)
+          in_capturing_mode=false
+          changelog_entry=""
+
+          while IFS= read -r line; do
+            # Start capturing when we hit the first version header (## X.Y.Z)
+            if [[ "$line" =~ ^##[[:space:]][0-9]+\.[0-9]+\.[0-9]+ ]]; then
+              if [ "$in_capturing_mode" = false ]; then
+                in_capturing_mode=true
+                continue
+              else
+                break
+              fi
+            fi
+
+            if [ "$in_capturing_mode" = true ]; then
+              changelog_entry="${changelog_entry}${line}"$'\n'
+            fi
+          done < CHANGELOG.md
+
+          # Remove leading and trailing blank lines, convert ### to **bold**
+          echo "$changelog_entry" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba;}' | sed -r "s/^###[[:space:]](.*)/\*\*\1\*\*/" > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "**Release v${VERSION}**" > release-notes.md
+            echo "" >> release-notes.md
+            echo "See CHANGELOG.md for details." >> release-notes.md
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.validate-version.outputs.version }}"
+          TAG="v${VERSION}"
+
+          gh release create "$TAG" artifacts/* --draft --fail-on-no-commits --notes-file release-notes.md --title "$TAG" --verify-tag
