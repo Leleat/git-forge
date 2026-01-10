@@ -100,6 +100,10 @@ pub struct PrCreateCommandArgs {
     #[arg(short, long)]
     editor: bool,
 
+    /// Use commit message(s) for title and body. Mutually exclusive with --editor.
+    #[arg(short, long)]
+    fill: bool,
+
     /// Don't open the issue in the browser after creation
     #[arg(short, long)]
     no_browser: bool,
@@ -479,17 +483,24 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
         ApiType::Gitea | ApiType::Forgejo => gitea::create_pr,
     };
 
+    if args.fill && args.editor {
+        anyhow::bail!("Cannot use both --fill and --editor flags together.");
+    }
+
     let (title, body) = if args.editor {
-        let message = match config.get_string_from_global_scope("editor-command") {
-            Some(cmd) => io::prompt_with_custom_text_editor(&cmd),
-            None => io::prompt_with_default_text_editor(),
-        }?;
+        get_title_and_body_for_pr_for_editor_flag(
+            config
+                .get_string_from_global_scope("editor-command")
+                .as_deref(),
+        )?
+    } else if args.fill {
+        let (generated_title, generated_body) =
+            get_title_and_body_for_pr_for_fill_flag(&target_branch, &current_branch)?;
 
-        if message.title.is_empty() {
-            anyhow::bail!("Title cannot be empty.");
-        }
-
-        (message.title, message.body)
+        (
+            args.title.unwrap_or(generated_title),
+            args.body.unwrap_or(generated_body),
+        )
     } else {
         (
             match args.title {
@@ -526,6 +537,52 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
 // =============================================================================
 // Private Helpers
 // =============================================================================
+
+fn get_title_and_body_for_pr_for_editor_flag(
+    editor_command: Option<&str>,
+) -> anyhow::Result<(String, String)> {
+    let message = match editor_command {
+        Some(cmd) => io::prompt_with_custom_text_editor(cmd),
+        None => io::prompt_with_default_text_editor(),
+    }?;
+
+    if message.title.is_empty() {
+        anyhow::bail!("Title cannot be empty.");
+    }
+
+    Ok((message.title, message.body))
+}
+
+fn get_title_and_body_for_pr_for_fill_flag(
+    target_branch: &str,
+    current_branch: &str,
+) -> anyhow::Result<(String, String)> {
+    let commit_shas = git::get_commit_range(target_branch, current_branch)
+        .context("Failed to get commits for PR")?;
+
+    if commit_shas.is_empty() {
+        anyhow::bail!(
+            "No commits found between '{target_branch}' and '{current_branch}'. Cannot create PR with --fill.",
+        );
+    }
+
+    if commit_shas.len() == 1 {
+        git::get_commit_message(&commit_shas[0]).context("Failed to get commit message")
+    } else {
+        let title = current_branch.to_string();
+        let body = commit_shas
+            .iter()
+            .map(|sha| {
+                git::get_commit_message(sha)
+                    .context("Failed to get commit message")
+                    .map(|(subject, _)| format!("- {subject}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .join("\n");
+
+        Ok((title, body))
+    }
+}
 
 fn list_prs_in_web_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
     let get_prs_url = match api_type {

@@ -232,6 +232,60 @@ describe.each([
 
         expect(result.exitCode).not.toBe(0);
     });
+
+    it("Should create PR with --fill", () => {
+        execSync(
+            "git checkout -b feature/add-logging && git commit --allow-empty -m 'Add logging support' -m 'This adds comprehensive logging to the application'",
+            {
+                cwd: localRepoDir,
+                stdio: "ignore",
+            },
+        );
+
+        const result = runGitForge({
+            args: [
+                "pr",
+                "create",
+                "--no-browser",
+                "--api",
+                forge,
+                "--api-url",
+                getApiUrl(forge),
+                "--fill",
+            ],
+            cwd: localRepoDir,
+            env: { [token]: "test-token" },
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("PR created at");
+    });
+
+    it("Should fail when using both --fill and --editor", () => {
+        switchBranchAndAddCommit("feature-branch", localRepoDir);
+
+        const result = runGitForge({
+            args: [
+                "pr",
+                "create",
+                "--no-browser",
+                "--api",
+                forge,
+                "--api-url",
+                getApiUrl(forge),
+                "--fill",
+                "--editor",
+            ],
+            cwd: localRepoDir,
+            env: { [token]: "test-token" },
+            throwsError: true,
+        });
+
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderr).toContain(
+            "Cannot use both --fill and --editor flags together",
+        );
+    });
 });
 
 function switchBranchAndAddCommit(newBranch: string, cwd: string) {
