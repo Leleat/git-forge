@@ -219,6 +219,73 @@ pub fn get_absolute_repo_root() -> anyhow::Result<String> {
     rev_parse("--show-toplevel")
 }
 
+/// Gets commit SHAs between two refs e.g., start..end (inclusive).
+///
+/// Returns a list of commit SHAs, most recent first.
+///
+/// # Errors
+///
+/// Returns an error if the git command fails.
+pub fn get_commit_range(start: &str, end: &str) -> anyhow::Result<Vec<String>> {
+    let output = Command::new("git")
+        .args(["log", "--format=%H", &format!("{start}..{end}")])
+        .output()
+        .context("Failed to execute git log")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        anyhow::bail!("Failed to get commits between {start} and {end}: {stderr}");
+    }
+
+    let commits = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+
+            if line.is_empty() {
+                None
+            } else {
+                Some(line.to_string())
+            }
+        })
+        .collect();
+
+    Ok(commits)
+}
+
+/// Gets the commit message for a given commit SHA.
+///
+/// Returns a tuple of (subject, body) where body may be empty.
+///
+/// # Errors
+///
+/// Returns an error if the git command fails.
+pub fn get_commit_message(commit_sha: &str) -> anyhow::Result<(String, String)> {
+    let output = Command::new("git")
+        .args(["log", "-1", "--format=%s%n%n%b", commit_sha])
+        .output()
+        .with_context(|| format!("Failed to get commit message for {}", commit_sha))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        anyhow::bail!("Failed to get commit message for {commit_sha}: {stderr}");
+    }
+
+    let message = String::from_utf8_lossy(&output.stdout).to_string();
+    let lines = message.lines().collect::<Vec<_>>();
+
+    if lines.is_empty() {
+        return Ok((String::new(), String::new()));
+    }
+
+    let subject = lines[0].trim().to_string();
+    let body = lines[1..].join("\n").trim().to_string();
+
+    Ok((subject, body))
+}
+
 /// Parsed data from a git remote URL.
 #[derive(Debug, PartialEq)]
 pub struct GitRemoteData {
