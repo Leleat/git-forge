@@ -28,11 +28,11 @@ pub struct BrowseCommandArgs {
 
     /// Open this commit-ish. If <PATH> is provided, open the file at this
     /// commit-ish
-    #[arg(short, long, value_name = "COMMIT_ISH")]
+    #[arg(short, long, group = "input-type", value_name = "COMMIT_ISH")]
     commit: Option<String>,
 
     /// Open the issues page. If <NUMBER> is provided, open that specific issue
-    #[arg(short, long, value_name = "NUMBER")]
+    #[arg(short, long, group = "input-type", value_name = "NUMBER")]
     issues: Option<Option<u32>>,
 
     /// Instead of opening the URL in your browser, print it to stdout
@@ -44,7 +44,14 @@ pub struct BrowseCommandArgs {
     path: Option<String>,
 
     /// Open the PR page. If <NUMBER> is provided, open that specific pr
-    #[arg(short, long, alias = "mrs", short_alias = 'm', value_name = "NUMBER")]
+    #[arg(
+        short,
+        long,
+        group = "input-type",
+        alias = "mrs",
+        short_alias = 'm',
+        value_name = "NUMBER"
+    )]
     prs: Option<Option<u32>>,
 
     /// Git remote to use
@@ -100,6 +107,10 @@ pub fn browse_repository(mut args: BrowseCommandArgs) -> anyhow::Result<()> {
         );
     }
 
+    if let Some(commit_ish) = args.commit {
+        return browse_commitish(&remote, &api_type, &commit_ish, args.no_browser);
+    }
+
     if let Some(issue_number) = args.issues {
         return match issue_number {
             Some(issue_number) => browse_issue(&remote, &api_type, issue_number, args.no_browser),
@@ -112,10 +123,6 @@ pub fn browse_repository(mut args: BrowseCommandArgs) -> anyhow::Result<()> {
             Some(pr_number) => browse_pr(&remote, &api_type, pr_number, args.no_browser),
             None => browse_prs(&remote, &api_type, args.no_browser),
         };
-    }
-
-    if let Some(commit_ish) = args.commit {
-        return browse_commitish(&remote, &api_type, &commit_ish, args.no_browser);
     }
 
     browse_home(&remote, &api_type, args.no_browser)

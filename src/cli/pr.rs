@@ -97,11 +97,11 @@ pub struct PrCreateCommandArgs {
     draft: bool,
 
     /// Open your text editor to write the pr message
-    #[arg(short, long)]
+    #[arg(short, long, group = "input-mode")]
     editor: bool,
 
     /// Use commit message(s) for title and body. Mutually exclusive with --editor.
-    #[arg(short, long)]
+    #[arg(short, long, group = "input-mode")]
     fill: bool,
 
     /// Don't open the issue in the browser after creation
@@ -482,10 +482,6 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
         ApiType::GitLab => gitlab::create_pr,
         ApiType::Gitea | ApiType::Forgejo => gitea::create_pr,
     };
-
-    if args.fill && args.editor {
-        anyhow::bail!("Cannot use both --fill and --editor flags together.");
-    }
 
     let (title, body) = if args.editor {
         get_title_and_body_for_pr_for_editor_flag(
