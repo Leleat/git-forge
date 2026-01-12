@@ -57,6 +57,10 @@ pub struct BrowseCommandArgs {
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
+
+    /// Open the releases page
+    #[arg(short = 'R', long, group = "input-type")]
+    releases: bool,
 }
 
 impl MergableWithConfig for BrowseCommandArgs {
@@ -123,6 +127,10 @@ pub fn browse_repository(mut args: BrowseCommandArgs) -> anyhow::Result<()> {
             Some(pr_number) => browse_pr(&remote, &api_type, pr_number, args.no_browser),
             None => browse_prs(&remote, &api_type, args.no_browser),
         };
+    }
+
+    if args.releases {
+        return browse_releases(&remote, &api_type, args.no_browser);
     }
 
     browse_home(&remote, &api_type, args.no_browser)
@@ -211,6 +219,21 @@ fn browse_prs(remote: &GitRemoteData, api_type: &ApiType, no_browser: bool) -> a
         ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_prs,
     };
     let url = get_prs_url(remote);
+
+    print_or_open(&url, no_browser)
+}
+
+fn browse_releases(
+    remote: &GitRemoteData,
+    api_type: &ApiType,
+    no_browser: bool,
+) -> anyhow::Result<()> {
+    let get_releases_url = match api_type {
+        ApiType::GitHub => github::get_url_for_releases,
+        ApiType::GitLab => gitlab::get_url_for_releases,
+        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_releases,
+    };
+    let url = get_releases_url(remote);
 
     print_or_open(&url, no_browser)
 }

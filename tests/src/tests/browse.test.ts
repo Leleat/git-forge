@@ -159,6 +159,36 @@ describe("Browse Command", () => {
             );
         });
 
+        it("Should generate releases page URL with --releases flag", () => {
+            const result = runGitForge({
+                args: [
+                    "browse",
+                    "--no-browser",
+                    "--api",
+                    "github",
+                    "--releases",
+                ],
+                cwd: tempDir,
+            });
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe(
+                "https://localhost:3001/user/repo/releases",
+            );
+        });
+
+        it("Should generate releases page URL with -R flag", () => {
+            const result = runGitForge({
+                args: ["browse", "--no-browser", "--api", "github", "-R"],
+                cwd: tempDir,
+            });
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe(
+                "https://localhost:3001/user/repo/releases",
+            );
+        });
+
         it("Should generate file path URL", () => {
             execSync("mkdir -p src && echo 'fn main() {}' > src/main.rs", {
                 cwd: tempDir,
@@ -325,6 +355,36 @@ describe("Browse Command", () => {
             );
         });
 
+        it("Should generate releases page URL with --releases flag", () => {
+            const result = runGitForge({
+                args: [
+                    "browse",
+                    "--no-browser",
+                    "--api",
+                    "gitlab",
+                    "--releases",
+                ],
+                cwd: tempDir,
+            });
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe(
+                "https://localhost:3002/user/repo/-/releases",
+            );
+        });
+
+        it("Should generate releases page URL with -R flag", () => {
+            const result = runGitForge({
+                args: ["browse", "--no-browser", "--api", "gitlab", "-R"],
+                cwd: tempDir,
+            });
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe(
+                "https://localhost:3002/user/repo/-/releases",
+            );
+        });
+
         it("Should generate file path URL", () => {
             execSync("mkdir -p src && echo 'pub fn test() {}' > src/lib.rs", {
                 cwd: tempDir,
@@ -473,6 +533,36 @@ describe("Browse Command", () => {
             expect(result.exitCode).toBe(0);
             expect(result.stdout).toMatch(
                 /^https:\/\/localhost:3003\/user\/repo\/commit\/[0-9a-f]{40}$/,
+            );
+        });
+
+        it("Should generate releases page URL with --releases flag", () => {
+            const result = runGitForge({
+                args: [
+                    "browse",
+                    "--no-browser",
+                    "--api",
+                    "gitea",
+                    "--releases",
+                ],
+                cwd: tempDir,
+            });
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe(
+                "https://localhost:3003/user/repo/releases",
+            );
+        });
+
+        it("Should generate releases page URL with -R flag", () => {
+            const result = runGitForge({
+                args: ["browse", "--no-browser", "--api", "gitea", "-R"],
+                cwd: tempDir,
+            });
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toBe(
+                "https://localhost:3003/user/repo/releases",
             );
         });
 
