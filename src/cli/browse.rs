@@ -28,11 +28,11 @@ pub struct BrowseCommandArgs {
 
     /// Open this commit-ish. If <PATH> is provided, open the file at this
     /// commit-ish
-    #[arg(short, long, value_name = "COMMIT_ISH")]
+    #[arg(short, long, group = "input-type", value_name = "COMMIT_ISH")]
     commit: Option<String>,
 
     /// Open the issues page. If <NUMBER> is provided, open that specific issue
-    #[arg(short, long, value_name = "NUMBER")]
+    #[arg(short, long, group = "input-type", value_name = "NUMBER")]
     issues: Option<Option<u32>>,
 
     /// Instead of opening the URL in your browser, print it to stdout
@@ -44,12 +44,23 @@ pub struct BrowseCommandArgs {
     path: Option<String>,
 
     /// Open the PR page. If <NUMBER> is provided, open that specific pr
-    #[arg(short, long, alias = "mrs", short_alias = 'm', value_name = "NUMBER")]
+    #[arg(
+        short,
+        long,
+        group = "input-type",
+        alias = "mrs",
+        short_alias = 'm',
+        value_name = "NUMBER"
+    )]
     prs: Option<Option<u32>>,
 
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
+
+    /// Open the releases page
+    #[arg(short = 'R', long, group = "input-type")]
+    releases: bool,
 }
 
 impl MergableWithConfig for BrowseCommandArgs {
@@ -100,6 +111,10 @@ pub fn browse_repository(mut args: BrowseCommandArgs) -> anyhow::Result<()> {
         );
     }
 
+    if let Some(commit_ish) = args.commit {
+        return browse_commitish(&remote, &api_type, &commit_ish, args.no_browser);
+    }
+
     if let Some(issue_number) = args.issues {
         return match issue_number {
             Some(issue_number) => browse_issue(&remote, &api_type, issue_number, args.no_browser),
@@ -114,8 +129,8 @@ pub fn browse_repository(mut args: BrowseCommandArgs) -> anyhow::Result<()> {
         };
     }
 
-    if let Some(commit_ish) = args.commit {
-        return browse_commitish(&remote, &api_type, &commit_ish, args.no_browser);
+    if args.releases {
+        return browse_releases(&remote, &api_type, args.no_browser);
     }
 
     browse_home(&remote, &api_type, args.no_browser)
@@ -204,6 +219,21 @@ fn browse_prs(remote: &GitRemoteData, api_type: &ApiType, no_browser: bool) -> a
         ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_prs,
     };
     let url = get_prs_url(remote);
+
+    print_or_open(&url, no_browser)
+}
+
+fn browse_releases(
+    remote: &GitRemoteData,
+    api_type: &ApiType,
+    no_browser: bool,
+) -> anyhow::Result<()> {
+    let get_releases_url = match api_type {
+        ApiType::GitHub => github::get_url_for_releases,
+        ApiType::GitLab => gitlab::get_url_for_releases,
+        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_releases,
+    };
+    let url = get_releases_url(remote);
 
     print_or_open(&url, no_browser)
 }

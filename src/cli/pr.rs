@@ -97,12 +97,23 @@ pub struct PrCreateCommandArgs {
     draft: bool,
 
     /// Open your text editor to write the pr message
-    #[arg(short, long)]
+    #[arg(short, long, group = "input-mode")]
     editor: bool,
 
-    /// Use commit message(s) for title and body. Mutually exclusive with --editor.
-    #[arg(short, long)]
+    /// Use the branch name as the PR title and put the commit subjects in a
+    /// list as the PR description
+    #[arg(short, long, group = "input-mode")]
     fill: bool,
+
+    /// Use the first commit subject as the PR title and put the first commit
+    /// body as the PR description
+    #[arg(long, group = "input-mode")]
+    fill_first: bool,
+
+    /// Use the branch name as the PR title and put all commit messages in a
+    /// list (subject and body) as the PR description
+    #[arg(long, group = "input-mode")]
+    fill_verbose: bool,
 
     /// Don't open the issue in the browser after creation
     #[arg(short, long)]
@@ -144,6 +155,24 @@ impl MergableWithConfig for PrCreateCommandArgs {
         if !self.editor {
             self.editor = config
                 .get_bool("pr/create/editor", remote)
+                .unwrap_or_default();
+        }
+
+        if !self.fill {
+            self.fill = config
+                .get_bool("pr/create/fill", remote)
+                .unwrap_or_default();
+        }
+
+        if !self.fill_first {
+            self.fill_first = config
+                .get_bool("pr/create/fill-first", remote)
+                .unwrap_or_default();
+        }
+
+        if !self.fill_verbose {
+            self.fill_verbose = config
+                .get_bool("pr/create/fill-verbose", remote)
                 .unwrap_or_default();
         }
 
@@ -483,10 +512,6 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
         ApiType::Gitea | ApiType::Forgejo => gitea::create_pr,
     };
 
-    if args.fill && args.editor {
-        anyhow::bail!("Cannot use both --fill and --editor flags together.");
-    }
-
     let (title, body) = if args.editor {
         get_title_and_body_for_pr_for_editor_flag(
             config
@@ -496,6 +521,22 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
     } else if args.fill {
         let (generated_title, generated_body) =
             get_title_and_body_for_pr_for_fill_flag(&target_branch, &current_branch)?;
+
+        (
+            args.title.unwrap_or(generated_title),
+            args.body.unwrap_or(generated_body),
+        )
+    } else if args.fill_first {
+        let (generated_title, generated_body) =
+            get_title_and_body_for_pr_for_fill_first_flag(&target_branch, &current_branch)?;
+
+        (
+            args.title.unwrap_or(generated_title),
+            args.body.unwrap_or(generated_body),
+        )
+    } else if args.fill_verbose {
+        let (generated_title, generated_body) =
+            get_title_and_body_for_pr_for_fill_verbose_flag(&target_branch, &current_branch)?;
 
         (
             args.title.unwrap_or(generated_title),
@@ -566,22 +607,75 @@ fn get_title_and_body_for_pr_for_fill_flag(
         );
     }
 
-    if commit_shas.len() == 1 {
-        git::get_commit_message(&commit_shas[0]).context("Failed to get commit message")
-    } else {
-        let title = current_branch.to_string();
-        let body = commit_shas
-            .iter()
-            .map(|sha| {
-                git::get_commit_message(sha)
-                    .context("Failed to get commit message")
-                    .map(|(subject, _)| format!("- {subject}"))
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .join("\n");
+    let title = current_branch.to_string();
+    let body = commit_shas
+        .iter()
+        .rev()
+        .map(|sha| {
+            git::get_commit_message(sha)
+                .context("Failed to get commit message")
+                .map(|(subject, _)| format!("- {subject}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .join("\n");
 
-        Ok((title, body))
+    Ok((title, body))
+}
+
+fn get_title_and_body_for_pr_for_fill_first_flag(
+    target_branch: &str,
+    current_branch: &str,
+) -> anyhow::Result<(String, String)> {
+    let commit_shas = git::get_commit_range(target_branch, current_branch)
+        .context("Failed to get commits for PR")?;
+
+    if let Some(last_commit) = commit_shas.last() {
+        return git::get_commit_message(last_commit).context("Failed to get commit message");
     }
+
+    anyhow::bail!(
+        "No commits found between '{target_branch}' and '{current_branch}'. Cannot create PR with --fill-first.",
+    );
+}
+
+fn get_title_and_body_for_pr_for_fill_verbose_flag(
+    target_branch: &str,
+    current_branch: &str,
+) -> anyhow::Result<(String, String)> {
+    let commit_shas = git::get_commit_range(target_branch, current_branch)
+        .context("Failed to get commits for PR")?;
+
+    if commit_shas.is_empty() {
+        anyhow::bail!(
+            "No commits found between '{target_branch}' and '{current_branch}'. Cannot create PR with --fill-verbose.",
+        );
+    }
+
+    let title = current_branch.to_string();
+    let body = commit_shas
+        .iter()
+        .rev()
+        .map(|sha| {
+            git::get_commit_message(sha)
+                .context("Failed to get commit message")
+                .map(|(subject, body)| {
+                    if body.is_empty() {
+                        format!("- **{subject}**")
+                    } else {
+                        let body = body
+                            .split("\n")
+                            .map(|line| format!("  {line}"))
+                            .collect::<Vec<String>>()
+                            .join("\n");
+
+                        format!("- **{subject}**\n{body}")
+                    }
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .join("\n");
+
+    Ok((title, body))
 }
 
 fn list_prs_in_web_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {

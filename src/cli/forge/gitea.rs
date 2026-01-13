@@ -298,6 +298,10 @@ pub fn get_url_for_prs(remote: &GitRemoteData) -> String {
     format!("{}/pulls", build_web_base_url(remote))
 }
 
+pub fn get_url_for_releases(remote: &GitRemoteData) -> String {
+    format!("{}/releases", build_web_base_url(remote))
+}
+
 pub fn get_url_for_path(
     remote: &GitRemoteData,
     path: &str,

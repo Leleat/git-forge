@@ -282,9 +282,7 @@ describe.each([
         });
 
         expect(result.exitCode).not.toBe(0);
-        expect(result.stderr).toContain(
-            "Cannot use both --fill and --editor flags together",
-        );
+        expect(result.stderr).toContain("cannot be used with");
     });
 });
 
