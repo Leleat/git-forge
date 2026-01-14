@@ -58,7 +58,7 @@ pub struct PrCheckoutCommandArgs {
     #[arg(long)]
     api_url: Option<String>,
 
-    /// PR number to checkout
+    /// PR number to checkout. Omit for interactive selection
     number: Option<u32>,
 
     /// Git remote to use
