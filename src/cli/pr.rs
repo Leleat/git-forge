@@ -58,8 +58,17 @@ pub struct PrCheckoutCommandArgs {
     #[arg(long)]
     api_url: Option<String>,
 
+    /// Use authentication with environment variables (GIT_FORGE_GITHUB_TOKEN,
+    /// GIT_FORGE_GITLAB_TOKEN, GIT_FORGE_GITEA_TOKEN) for interactive selection
+    #[arg(long)]
+    auth: bool,
+
     /// PR number to checkout. Omit for interactive selection
     number: Option<u32>,
+
+    /// Number of PRs per page for interactive selection
+    #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
+    per_page: Option<u32>,
 
     /// Git remote to use
     #[arg(long)]
@@ -74,6 +83,16 @@ impl MergableWithConfig for PrCheckoutCommandArgs {
 
         if self.api_url.is_none() {
             self.api_url = config.get_string("pr/checkout/api-url", remote);
+        }
+
+        if !self.auth {
+            self.auth = config
+                .get_bool("pr/checkout/auth", remote)
+                .unwrap_or_default();
+        }
+
+        if self.per_page.is_none() {
+            self.per_page = config.get_u32("pr/checkout/per-page", remote);
         }
     }
 }
@@ -464,7 +483,13 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
         Some(nr) => nr,
         None => {
             let remote = remote_result?;
-            let pr = select_pr_to_checkout(remote, api_type, args.api_url, false)?;
+            let pr = select_pr_to_checkout(
+                remote,
+                api_type,
+                args.api_url,
+                args.auth,
+                args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+            )?;
 
             pr.id
         }
@@ -741,6 +766,7 @@ fn select_pr_to_checkout(
     api_type: ApiType,
     api_url: Option<String>,
     use_auth: bool,
+    per_page: u32,
 ) -> anyhow::Result<Pr> {
     let get_prs = match api_type {
         ApiType::GitHub => github::get_prs,
@@ -753,7 +779,6 @@ fn select_pr_to_checkout(
         let author: Option<&str> = options.parse_str("author");
         let draft: bool = options.parse("draft").unwrap_or_default();
         let labels: Vec<String> = options.parse_list("labels").unwrap_or_default();
-        let per_page: u32 = DEFAULT_PER_PAGE;
         let state: PrState = options.parse_enum("state").unwrap_or_default();
 
         let prs = get_prs(
