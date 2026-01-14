@@ -314,6 +314,7 @@ pub fn list_issues(mut args: IssueListCommandArgs) -> anyhow::Result<()> {
     }
 }
 
+/// Executes the `issue create` subcommand to create an issue.
 pub fn create_issue(mut args: IssueCreateCommandArgs) -> anyhow::Result<()> {
     let config = Config::load_from_disk().context("Failed to load configuration")?;
     let remote_name = args.remote.clone().unwrap_or_else(|| {
