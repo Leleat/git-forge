@@ -12,7 +12,7 @@ use crate::{
     },
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
-    tui::{self, FetchResult, ListableItem},
+    tui::{self, ListableItem},
 };
 
 // =============================================================================
@@ -464,7 +464,7 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
         Some(nr) => nr,
         None => {
             let remote = remote_result?;
-            let pr = select_pr_to_checkout(remote, api_type, args.api_url)?;
+            let pr = select_pr_to_checkout(remote, api_type, args.api_url, false)?;
 
             pr.id
         }
@@ -740,6 +740,7 @@ fn select_pr_to_checkout(
     remote: GitRemoteData,
     api_type: ApiType,
     api_url: Option<String>,
+    use_auth: bool,
 ) -> anyhow::Result<Pr> {
     let get_prs = match api_type {
         ApiType::GitHub => github::get_prs,
@@ -748,12 +749,11 @@ fn select_pr_to_checkout(
     };
     let http_client = HttpClient::new();
 
-    tui::select_item_with(move |page, options| {
-        let auth: bool = options.parse("auth").unwrap_or_default();
+    tui::select_item_with(move |page, options, result| {
         let author: Option<&str> = options.parse_str("author");
         let draft: bool = options.parse("draft").unwrap_or_default();
         let labels: Vec<String> = options.parse_list("labels").unwrap_or_default();
-        let per_page: u32 = options.parse("per-page").unwrap_or(DEFAULT_PER_PAGE);
+        let per_page: u32 = DEFAULT_PER_PAGE;
         let state: PrState = options.parse_enum("state").unwrap_or_default();
 
         let prs = get_prs(
@@ -768,13 +768,10 @@ fn select_pr_to_checkout(
                 per_page,
                 state: &state,
             },
-            auth,
+            use_auth,
         )?;
-        let has_more = prs.len() == per_page as usize;
+        let more_items_exist = prs.len() == per_page as usize;
 
-        Ok(FetchResult {
-            items: prs,
-            has_more,
-        })
+        Ok(result.with_items(prs).with_more_items(more_items_exist))
     })
 }

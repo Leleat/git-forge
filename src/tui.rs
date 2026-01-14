@@ -34,7 +34,10 @@ const SELECTION_PREFIX: &str = "> ";
 pub fn select_item_with<T, F>(fetch: F) -> anyhow::Result<T>
 where
     T: ListableItem,
-    F: Fn(u32, &FetchOptions) -> anyhow::Result<FetchResult<T>> + Send + Sync + 'static,
+    F: Fn(u32, &FetchOptions, FetchResult<T>) -> anyhow::Result<FetchResult<T>>
+        + Send
+        + Sync
+        + 'static,
 {
     let mut app = App::new(fetch);
     let selected_index = ratatui::run(|terminal| {
@@ -109,27 +112,60 @@ impl FetchOptions {
 
 /// The response returned by the fetch function.
 pub struct FetchResult<T> {
+    /// Whether the items should replace the existing ones
+    append_items: bool,
+    /// Whether more items are available for future fetching.
+    more_items: bool,
     /// Items in this page.
-    pub items: Vec<T>,
-    /// Whether more items are available.
-    pub has_more: bool,
+    items: Vec<T>,
+    /// The page of the fetch
+    page: u32,
+}
+
+impl<T> FetchResult<T> {
+    pub fn new() -> Self {
+        FetchResult {
+            append_items: false,
+            items: vec![],
+            more_items: true,
+            page: 1,
+        }
+    }
+
+    pub fn with_items(mut self, items: Vec<T>) -> Self {
+        self.items.extend(items);
+
+        self
+    }
+
+    pub fn with_more_items(mut self, more_items: bool) -> Self {
+        self.more_items = more_items;
+
+        self
+    }
+
+    fn with_append_items(mut self, append_items: bool) -> Self {
+        self.append_items = append_items;
+
+        self
+    }
+
+    fn with_page(mut self, page: u32) -> Self {
+        self.page = page;
+
+        self
+    }
 }
 
 #[derive(Default)]
 enum FetchStatus<T> {
     #[default]
     Idle,
-    Fetching(Receiver<anyhow::Result<ParsedFetchResult<T>>>),
+    Fetching(Receiver<anyhow::Result<FetchResult<T>>>),
 }
 
-struct ParsedFetchResult<T> {
-    append_items: bool,
-    items: Vec<T>,
-    has_more: bool,
-    page: u32,
-}
-
-type FetchFn<T> = Arc<dyn Fn(u32, &FetchOptions) -> anyhow::Result<FetchResult<T>> + Send + Sync>;
+type FetchFn<T> =
+    Arc<dyn Fn(u32, &FetchOptions, FetchResult<T>) -> anyhow::Result<FetchResult<T>> + Send + Sync>;
 
 struct ItemFetcher<T> {
     fetch: FetchFn<T>,
@@ -140,7 +176,10 @@ struct ItemFetcher<T> {
 impl<T: ListableItem> ItemFetcher<T> {
     fn new<F>(fetch: F) -> Self
     where
-        F: Fn(u32, &FetchOptions) -> anyhow::Result<FetchResult<T>> + Send + Sync + 'static,
+        F: Fn(u32, &FetchOptions, FetchResult<T>) -> anyhow::Result<FetchResult<T>>
+            + Send
+            + Sync
+            + 'static,
     {
         Self {
             status: FetchStatus::default(),
@@ -149,23 +188,16 @@ impl<T: ListableItem> ItemFetcher<T> {
         }
     }
 
-    fn fetch(&mut self, filters: FetchOptions, page: u32, append_items: bool) {
-        self.options = filters.clone();
+    fn fetch(&mut self, options: FetchOptions, page: u32, fetch_result: FetchResult<T>) {
+        self.options = options.clone();
 
         let (tx, rx) = mpsc::channel();
         let fetch = Arc::clone(&self.fetch);
 
         thread::spawn(move || {
-            let fetch_result = fetch(page, &filters).map(|result| ParsedFetchResult {
-                page,
-                items: result.items,
-                append_items,
-                has_more: result.has_more,
-            });
-
             // Ignore send errors - e.g. receiver may have been dropped if user
             // started a new search... which we don't care about.
-            tx.send(fetch_result).ok();
+            tx.send(fetch(page, &options, fetch_result)).ok();
         });
 
         self.status = FetchStatus::Fetching(rx);
@@ -175,7 +207,7 @@ impl<T: ListableItem> ItemFetcher<T> {
         matches!(self.status, FetchStatus::Fetching { .. })
     }
 
-    fn poll_result(&mut self) -> Option<anyhow::Result<ParsedFetchResult<T>>> {
+    fn poll_result(&mut self) -> Option<anyhow::Result<FetchResult<T>>> {
         if let FetchStatus::Fetching(rx) = &self.status
             && let Ok(result) = rx.try_recv()
         {
@@ -218,11 +250,11 @@ impl<T> ListState<T> {
         &self.items
     }
 
-    fn push_items(&mut self, new_items: Vec<T>) {
+    fn append_items(&mut self, new_items: Vec<T>) {
         self.items.extend(new_items);
     }
 
-    fn set_items(&mut self, new_items: Vec<T>) {
+    fn replace_items(&mut self, new_items: Vec<T>) {
         self.items = new_items;
         self.state
             .select(if self.items.is_empty() { None } else { Some(0) });
@@ -494,24 +526,24 @@ struct PaginationState {
     /// We init this with 0 because we have no better value to use at this
     /// moment. It actually needs to be set from the outside because it depends
     /// on the terminal height.
-    page_size: u16,
+    per_page: u16,
     /// API has more items to fetch.
-    has_more: bool,
+    has_next_page: bool,
 }
 
 impl PaginationState {
     fn reset(&mut self) {
         self.current_page = 0;
-        self.has_more = true;
+        self.has_next_page = true;
     }
 }
 
 impl Default for PaginationState {
     fn default() -> Self {
         PaginationState {
-            has_more: true, // default to true for initial fetch
+            has_next_page: true, // default to true for initial fetch
             current_page: Default::default(),
-            page_size: Default::default(),
+            per_page: Default::default(),
         }
     }
 }
@@ -540,7 +572,10 @@ struct App<T: ListableItem> {
 impl<T: ListableItem> App<T> {
     fn new<F>(fetch: F) -> Self
     where
-        F: Fn(u32, &FetchOptions) -> anyhow::Result<FetchResult<T>> + Send + Sync + 'static,
+        F: Fn(u32, &FetchOptions, FetchResult<T>) -> anyhow::Result<FetchResult<T>>
+            + Send
+            + Sync
+            + 'static,
     {
         Self {
             focus: Focus::default(),
@@ -587,38 +622,31 @@ impl<T: ListableItem> App<T> {
     }
 
     fn update(&mut self) -> anyhow::Result<()> {
-        // We should initialize a fetch on initial draw or if the user reached
-        // the end of the currently shown items.
-        let should_initialize_fetching = {
-            if self.item_fetcher.is_fetching()
-                || !self.pagination.has_more
-                || matches!(self.focus, Focus::SearchBar)
-            {
-                false
-            } else if let Some(selected) = self.list.selected_index() {
-                const THRESHOLD: usize = 3;
+        const LOAD_THRESHOLD: usize = 1;
+        let reached_end_of_page = self.focus == Focus::List
+            && match self.list.selected_index() {
+                Some(selected) => {
+                    self.list.items.len().saturating_sub(selected + 1) < LOAD_THRESHOLD
+                }
+                None => true, // fetch on start of TUI
+            };
 
-                self.list.items.len().saturating_sub(selected + 1) < THRESHOLD
-            } else {
-                true
-            }
-        };
-
-        if should_initialize_fetching {
-            self.fetch_items(self.item_fetcher.options.clone(), true);
+        if !self.item_fetcher.is_fetching() && self.pagination.has_next_page && reached_end_of_page
+        {
+            self.fetch_and_append_items(self.item_fetcher.options.clone());
         }
 
         if let Some(fetch_result) = self.item_fetcher.poll_result() {
             let fetch_result = fetch_result?;
 
             if fetch_result.append_items {
-                self.list.push_items(fetch_result.items);
+                self.list.append_items(fetch_result.items);
             } else {
-                self.list.set_items(fetch_result.items);
+                self.list.replace_items(fetch_result.items);
             }
 
             self.pagination.current_page = fetch_result.page;
-            self.pagination.has_more = fetch_result.has_more;
+            self.pagination.has_next_page = fetch_result.more_items;
 
             if self.list.selected_index().is_none() {
                 self.list.select_next();
@@ -628,18 +656,23 @@ impl<T: ListableItem> App<T> {
         Ok(())
     }
 
-    fn fetch_items(&mut self, filters: FetchOptions, append_items: bool) {
-        if append_items {
-            self.item_fetcher
-                .fetch(filters, self.pagination.current_page + 1, true);
-        } else {
-            // Reset any in-flight fetch, e.g. when starting searches back to
-            // back quickly
-            self.item_fetcher.reset();
-            self.pagination.reset();
+    fn fetch_and_append_items(&mut self, options: FetchOptions) {
+        let page = self.pagination.current_page + 1;
+        let fetch_result = FetchResult::new().with_page(page).with_append_items(true);
 
-            self.item_fetcher.fetch(filters, 1, false);
-        }
+        self.item_fetcher.fetch(options, page, fetch_result);
+    }
+
+    fn fetch_and_replace_items(&mut self, options: FetchOptions) {
+        // Reset any in-flight fetch, e.g. when starting searches back to
+        // back quickly
+        self.item_fetcher.reset();
+        self.pagination.reset();
+
+        let page = 1;
+        let fetch_result = FetchResult::new().with_page(page).with_append_items(false);
+
+        self.item_fetcher.fetch(options, page, fetch_result);
     }
 
     fn handle_key_event_list_widget(
@@ -673,12 +706,12 @@ impl<T: ListableItem> App<T> {
                 UserAction::None
             }
             KeyCode::PageUp => {
-                self.list.select_page_up(self.pagination.page_size);
+                self.list.select_page_up(self.pagination.per_page);
 
                 UserAction::None
             }
             KeyCode::PageDown => {
-                self.list.select_page_down(self.pagination.page_size);
+                self.list.select_page_down(self.pagination.per_page);
 
                 UserAction::None
             }
@@ -798,13 +831,13 @@ impl<T: ListableItem> App<T> {
                 UserAction::None
             }
             KeyCode::Enter => {
-                let filters = parse_filters(&self.search.query);
+                let fetch_options = parse_fetch_options(&self.search.query);
 
                 self.search.save_to_history();
                 self.search.clear();
                 self.focus = Focus::List;
 
-                self.fetch_items(filters, false);
+                self.fetch_and_replace_items(fetch_options);
 
                 UserAction::None
             }
@@ -813,7 +846,7 @@ impl<T: ListableItem> App<T> {
     }
 
     fn render_list(&mut self, frame: &mut Frame, area: Rect) {
-        self.pagination.page_size = area.height;
+        self.pagination.per_page = area.height;
 
         let list = if self.list.is_empty() {
             let message = if self.item_fetcher.is_fetching() {
@@ -836,7 +869,7 @@ impl<T: ListableItem> App<T> {
             let item_count = list_items.len();
             let max_item_count = area.height as usize;
 
-            if self.pagination.has_more {
+            if self.pagination.has_next_page {
                 for _ in item_count..max_item_count {
                     list_items.push(widgets::ListItem::new("·").style(Style::new().fg(COLOR_DIM)));
                 }
@@ -895,14 +928,14 @@ impl<T: ListableItem> App<T> {
         } else if !options.is_empty() {
             let mut status = String::new();
 
-            for (key, value) in options {
-                if key != "query" {
-                    status.push_str(&format!("@{key}={value} "));
-                }
-            }
-
             if let Some(query) = options.get("query") {
                 status.push_str(query);
+            }
+
+            for (key, value) in options {
+                if key != "query" {
+                    status.push_str(&format!(" @{key}={value}"));
+                }
             }
 
             status
@@ -942,13 +975,13 @@ impl<T: ListableItem> App<T> {
     }
 }
 
-fn parse_filters(query: &str) -> FetchOptions {
+fn parse_fetch_options(query: &str) -> FetchOptions {
     let mut options = FetchOptions::new();
     let mut remaining_text = String::new();
 
     for word in query.split_whitespace() {
-        if let Some(filter_str) = word.strip_prefix('@')
-            && let Some((key, value)) = filter_str.split_once('=')
+        if let Some(option_str) = word.strip_prefix('@')
+            && let Some((key, value)) = option_str.split_once('=')
         {
             options
                 .as_hash_map_mut()
