@@ -12,6 +12,7 @@ use crate::{
     },
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
+    tui::{self, FetchResult, ListableItem},
 };
 
 // =============================================================================
@@ -58,7 +59,7 @@ pub struct PrCheckoutCommandArgs {
     api_url: Option<String>,
 
     /// PR number to checkout
-    number: u32,
+    number: Option<u32>,
 
     /// Git remote to use
     #[arg(long)]
@@ -336,7 +337,7 @@ pub enum PrField {
     Draft,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Pr {
     /// The pull request number (e.g., #42).
     pub id: u32,
@@ -360,6 +361,12 @@ pub struct Pr {
     pub target_branch: String,
     /// Whether the pull request is a draft.
     pub draft: bool,
+}
+
+impl ListableItem for Pr {
+    fn get_display_text(&self) -> String {
+        format!("{}: {}", self.id, self.title)
+    }
 }
 
 pub struct ListPrsFilters<'a> {
@@ -439,13 +446,12 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
 
     // Allow remote detection to fail if user provides --api explicitly.
     let api_type = match remote_result {
-        Ok(remote) => forge::guess_api_type_from_host(&remote.host)
+        Ok(ref remote) => forge::guess_api_type_from_host(&remote.host)
             .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
-        Err(e) => match args.api {
+        Err(ref e) => match args.api {
             Some(api_type) => api_type,
             None => anyhow::bail!(
-                "No API type was provided and failed to guess it from the git remote URL: {}",
-                e
+                "No API type was provided and failed to guess it from the git remote URL: {e}"
             ),
         },
     };
@@ -454,11 +460,22 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
         ApiType::GitLab => gitlab::get_pr_ref,
         ApiType::Gitea | ApiType::Forgejo => gitea::get_pr_ref,
     };
-    let pr_number = args.number;
+    let pr_number = match args.number {
+        Some(nr) => nr,
+        None => {
+            let remote = remote_result?;
+            let pr = select_pr_to_checkout(remote, api_type, args.api_url)?;
+
+            pr.id
+        }
+    };
     let pr_ref = get_pr_ref(pr_number);
     let branch_name = format!("pr-{pr_number}");
 
+    eprintln!("Fetching {pr_ref}:{branch_name} from {remote_name}...");
     git::fetch_pull_request(&pr_ref, &branch_name, &remote_name)?;
+
+    eprintln!("Checking out {branch_name}...");
     git::checkout_branch(&branch_name)?;
 
     eprintln!("Successfully checked out PR \"{pr_number}\" to branch \"{branch_name}\"");
@@ -717,4 +734,47 @@ fn list_prs_to_stdout(
     }
 
     Ok(())
+}
+
+fn select_pr_to_checkout(
+    remote: GitRemoteData,
+    api_type: ApiType,
+    api_url: Option<String>,
+) -> anyhow::Result<Pr> {
+    let get_prs = match api_type {
+        ApiType::GitHub => github::get_prs,
+        ApiType::GitLab => gitlab::get_prs,
+        ApiType::Gitea | ApiType::Forgejo => gitea::get_prs,
+    };
+    let http_client = HttpClient::new();
+
+    tui::select_item_with(move |page, options| {
+        let auth: bool = options.parse("auth").unwrap_or_default();
+        let author: Option<&str> = options.parse_str("author");
+        let draft: bool = options.parse("draft").unwrap_or_default();
+        let labels: Vec<String> = options.parse_list("labels").unwrap_or_default();
+        let per_page: u32 = options.parse("per-page").unwrap_or(DEFAULT_PER_PAGE);
+        let state: PrState = options.parse_enum("state").unwrap_or_default();
+
+        let prs = get_prs(
+            &http_client,
+            &remote,
+            api_url.as_deref(),
+            &ListPrsFilters {
+                author,
+                draft,
+                labels: &labels,
+                page,
+                per_page,
+                state: &state,
+            },
+            auth,
+        )?;
+        let has_more = prs.len() == per_page as usize;
+
+        Ok(FetchResult {
+            items: prs,
+            has_more,
+        })
+    })
 }

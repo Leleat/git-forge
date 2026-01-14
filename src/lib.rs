@@ -1,6 +1,7 @@
 mod cli;
 mod git;
 mod io;
+mod tui;
 
 use clap::Parser;
 
