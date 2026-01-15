@@ -4,6 +4,7 @@ use anyhow::Context;
 use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Input;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::{
     cli::{
@@ -12,7 +13,7 @@ use crate::{
     },
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
-    tui::{self, FetchResult, ListableItem},
+    tui::{self, FetchOptions, ListableItem},
 };
 
 // =============================================================================
@@ -58,12 +59,37 @@ pub struct PrCheckoutCommandArgs {
     #[arg(long)]
     api_url: Option<String>,
 
-    /// PR number to checkout
+    /// Use authentication with environment variables (GIT_FORGE_GITHUB_TOKEN,
+    /// GIT_FORGE_GITLAB_TOKEN, GIT_FORGE_GITEA_TOKEN) for interactive selection
+    #[arg(long)]
+    auth: bool,
+
+    /// Filter by author username for interactive selection
+    #[arg(long)]
+    author: Option<String>,
+
+    /// Filter to only draft PRs for interactive selection
+    #[arg(long)]
+    draft: bool,
+
+    /// Filter by labels (comma-separated) for interactive selection
+    #[arg(long, value_delimiter = ',')]
+    labels: Vec<String>,
+
+    /// PR number to checkout. Omit for interactive selection
     number: Option<u32>,
+
+    /// Number of PRs per page for interactive selection
+    #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
+    per_page: Option<u32>,
 
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
+
+    /// Filter by state for interactive selection
+    #[arg(long)]
+    state: Option<PrState>,
 }
 
 impl MergableWithConfig for PrCheckoutCommandArgs {
@@ -74,6 +100,30 @@ impl MergableWithConfig for PrCheckoutCommandArgs {
 
         if self.api_url.is_none() {
             self.api_url = config.get_string("pr/checkout/api-url", remote);
+        }
+
+        if !self.auth {
+            self.auth = config
+                .get_bool("pr/checkout/auth", remote)
+                .unwrap_or_default();
+        }
+
+        if self.author.is_none() {
+            self.author = config.get_string("pr/checkout/author", remote);
+        }
+
+        if !self.draft {
+            self.draft = config
+                .get_bool("pr/checkout/draft", remote)
+                .unwrap_or_default();
+        }
+
+        if self.per_page.is_none() {
+            self.per_page = config.get_u32("pr/checkout/per-page", remote);
+        }
+
+        if self.state.is_none() {
+            self.state = config.get_enum("pr/checkout/state", remote);
         }
     }
 }
@@ -228,12 +278,21 @@ pub struct PrListCommandArgs {
     #[arg(long)]
     format: Option<OutputFormat>,
 
+    /// Use interactive TUI for searching and selecting a PR
+    #[arg(short, long, group = "interaction-type")]
+    interactive: bool,
+
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
     labels: Vec<String>,
 
     /// Page number to fetch
-    #[arg(long, default_value_t = 1, value_name = "NUMBER")]
+    #[arg(
+        long,
+        default_value_t = 1,
+        group = "interaction-type",
+        value_name = "NUMBER"
+    )]
     page: u32,
 
     /// Number of PRs per page
@@ -279,6 +338,12 @@ impl MergableWithConfig for PrListCommandArgs {
 
         if self.format.is_none() {
             self.format = config.get_enum("pr/list/format", remote);
+        }
+
+        if !self.interactive {
+            self.interactive = config
+                .get_bool("pr/list/interactive", remote)
+                .unwrap_or_default();
         }
 
         if self.per_page.is_none() {
@@ -410,7 +475,9 @@ pub fn list_prs(mut args: PrListCommandArgs) -> anyhow::Result<()> {
             .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
     };
 
-    if args.web {
+    if args.interactive {
+        list_prs_interactively(remote, api_type, args)
+    } else if args.web {
         list_prs_in_web_browser(&remote, &api_type)
     } else {
         list_prs_to_stdout(
@@ -464,7 +531,21 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
         Some(nr) => nr,
         None => {
             let remote = remote_result?;
-            let pr = select_pr_to_checkout(remote, api_type, args.api_url)?;
+            let fetch_options = build_fetch_options_for_interactive_selection(
+                args.author,
+                args.draft,
+                args.labels,
+                args.state,
+            );
+
+            let pr = select_pr_interactively(
+                remote,
+                api_type,
+                args.api_url,
+                fetch_options,
+                args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+                args.auth,
+            )?;
 
             pr.id
         }
@@ -721,7 +802,7 @@ fn list_prs_to_stdout(
         ApiType::GitLab => gitlab::get_prs,
         ApiType::Gitea | ApiType::Forgejo => gitea::get_prs,
     };
-    let prs = get_prs(&HttpClient::new(), remote, api_url, filters, use_auth)?;
+    let response = get_prs(&HttpClient::new(), remote, api_url, filters, use_auth)?;
 
     let fields = if fields.is_empty() {
         vec![PrField::Title, PrField::Id, PrField::Url]
@@ -729,34 +810,100 @@ fn list_prs_to_stdout(
         fields
     };
 
-    if !prs.is_empty() {
-        println!("{}", io::format(&prs, &fields, output_format)?);
+    if !response.items.is_empty() {
+        println!("{}", io::format(&response.items, &fields, output_format)?);
     }
 
     Ok(())
 }
 
-fn select_pr_to_checkout(
+fn list_prs_interactively(
+    remote: GitRemoteData,
+    api_type: ApiType,
+    args: PrListCommandArgs,
+) -> anyhow::Result<()> {
+    let fetch_options = build_fetch_options_for_interactive_selection(
+        args.author,
+        args.draft,
+        args.labels,
+        args.state,
+    );
+
+    let pr = select_pr_interactively(
+        remote,
+        api_type,
+        args.api_url,
+        fetch_options,
+        args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+        args.auth,
+    )?;
+
+    let output_format = args.format.unwrap_or_default();
+    let fields = if args.fields.is_empty() {
+        vec![PrField::Title, PrField::Id, PrField::Url]
+    } else {
+        args.fields
+    };
+
+    println!("{}", io::format(&[&pr], &fields, &output_format)?);
+
+    if args.web {
+        open::that(pr.url)?;
+    }
+
+    Ok(())
+}
+
+fn build_fetch_options_for_interactive_selection(
+    author: Option<String>,
+    draft: bool,
+    labels: Vec<String>,
+    state: Option<PrState>,
+) -> FetchOptions {
+    let mut options_map = HashMap::new();
+
+    if let Some(author) = author {
+        options_map.insert(String::from("author"), author);
+    }
+
+    if draft {
+        options_map.insert(String::from("draft"), String::from("true"));
+    }
+
+    if !labels.is_empty() {
+        options_map.insert(String::from("labels"), labels.join(","));
+    }
+
+    if let Some(state) = state {
+        options_map.insert(String::from("state"), state.to_string());
+    }
+
+    FetchOptions::new(options_map)
+}
+
+fn select_pr_interactively(
     remote: GitRemoteData,
     api_type: ApiType,
     api_url: Option<String>,
+    initial_options: FetchOptions,
+    per_page: u32,
+    use_auth: bool,
 ) -> anyhow::Result<Pr> {
     let get_prs = match api_type {
         ApiType::GitHub => github::get_prs,
         ApiType::GitLab => gitlab::get_prs,
         ApiType::Gitea | ApiType::Forgejo => gitea::get_prs,
     };
+
     let http_client = HttpClient::new();
 
-    tui::select_item_with(move |page, options| {
-        let auth: bool = options.parse("auth").unwrap_or_default();
+    tui::select_item_with(initial_options, move |page, options, result| {
         let author: Option<&str> = options.parse_str("author");
         let draft: bool = options.parse("draft").unwrap_or_default();
         let labels: Vec<String> = options.parse_list("labels").unwrap_or_default();
-        let per_page: u32 = options.parse("per-page").unwrap_or(DEFAULT_PER_PAGE);
         let state: PrState = options.parse_enum("state").unwrap_or_default();
 
-        let prs = get_prs(
+        let response = get_prs(
             &http_client,
             &remote,
             api_url.as_deref(),
@@ -768,13 +915,11 @@ fn select_pr_to_checkout(
                 per_page,
                 state: &state,
             },
-            auth,
+            use_auth,
         )?;
-        let has_more = prs.len() == per_page as usize;
 
-        Ok(FetchResult {
-            items: prs,
-            has_more,
-        })
+        Ok(result
+            .with_items(response.items)
+            .with_more_items(response.has_next_page))
     })
 }

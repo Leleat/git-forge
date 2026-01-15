@@ -19,6 +19,7 @@ pub struct CompletionsCommandArgs {
 // Command Logic
 // =============================================================================
 
+/// Executes the completions subcommand to generate shell completion scripts.
 pub fn generate_completions(args: CompletionsCommandArgs) -> anyhow::Result<()> {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();

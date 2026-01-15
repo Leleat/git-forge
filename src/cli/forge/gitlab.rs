@@ -4,7 +4,7 @@ use url::form_urlencoded::byte_serialize;
 
 use crate::{
     cli::{
-        forge::http_client::{HttpClient, WithAuth},
+        forge::http_client::{HttpClient, PaginatedResponse, WithAuth},
         issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
@@ -105,7 +105,7 @@ pub fn get_issues(
     api_url: Option<&str>,
     filters: &ListIssueFilters,
     use_auth: bool,
-) -> anyhow::Result<Vec<Issue>> {
+) -> anyhow::Result<PaginatedResponse<Issue>> {
     let base_url = match api_url {
         Some(url) => url,
         None => &build_api_base_url(remote),
@@ -135,16 +135,12 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    let issues = request
+    request
         .send()
         .context("Failed to fetch issues from GitLab API")?
-        .json::<Vec<GitLabIssue>>()
-        .context("Failed to parse GitLab API response")?
-        .into_iter()
-        .map(Into::into)
-        .collect::<Vec<Issue>>();
-
-    Ok(issues)
+        .try_into()
+        .context("Failed to parse GitLab API response")
+        .map(|response: PaginatedResponse<GitLabIssue>| response.map(Into::into))
 }
 
 pub fn create_issue(
@@ -182,7 +178,7 @@ pub fn get_prs(
     api_url: Option<&str>,
     filters: &ListPrsFilters,
     use_auth: bool,
-) -> anyhow::Result<Vec<Pr>> {
+) -> anyhow::Result<PaginatedResponse<Pr>> {
     let base_url = match api_url {
         Some(url) => url,
         None => &build_api_base_url(remote),
@@ -212,13 +208,12 @@ pub fn get_prs(
         request = request.query(&[("wip", "yes")]);
     }
 
-    let mrs: Vec<GitLabMergeRequest> = request
+    request
         .send()
         .context("Failed to fetch merge requests from GitLab API")?
-        .json()
-        .context("Failed to parse GitLab API response")?;
-
-    Ok(mrs.into_iter().map(Into::into).collect())
+        .try_into()
+        .context("Failed to parse GitLab API response")
+        .map(|response: PaginatedResponse<GitLabMergeRequest>| response.map(Into::into))
 }
 
 pub fn create_pr(

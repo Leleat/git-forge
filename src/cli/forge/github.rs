@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::{
     cli::{
-        forge::http_client::{HttpClient, WithAuth},
+        forge::http_client::{HttpClient, PaginatedResponse, WithAuth},
         issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
@@ -112,7 +112,7 @@ pub fn get_issues(
     api_url: Option<&str>,
     filters: &ListIssueFilters,
     use_auth: bool,
-) -> anyhow::Result<Vec<Issue>> {
+) -> anyhow::Result<PaginatedResponse<Issue>> {
     let base_url = match api_url {
         Some(url) => url,
         None => &build_api_base_url(remote),
@@ -139,19 +139,18 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    let issues = request
+    // Filter out pull requests (GitHub's /issues endpoint includes PRs)
+    request
         .send()
         .context("Failed to fetch issues from GitHub API")?
-        .json::<Vec<GitHubIssue>>()
-        .context("Failed to parse GitHub API response")?
-        .into_iter()
-        .filter_map(|i| match i.pull_request {
-            Some(_) => None,
-            None => Some(i.into()),
+        .try_into()
+        .context("Failed to parse GitHub API response")
+        .map(|response: PaginatedResponse<GitHubIssue>| {
+            response.filter_map(|i| match i.pull_request {
+                Some(_) => None,
+                None => Some(i.into()),
+            })
         })
-        .collect::<Vec<Issue>>();
-
-    Ok(issues)
 }
 
 pub fn create_issue(
@@ -189,7 +188,7 @@ pub fn get_prs(
     api_url: Option<&str>,
     filters: &ListPrsFilters,
     use_auth: bool,
-) -> anyhow::Result<Vec<Pr>> {
+) -> anyhow::Result<PaginatedResponse<Pr>> {
     let base_url = match api_url {
         Some(url) => url,
         None => &build_api_base_url(remote),
@@ -204,37 +203,40 @@ pub fn get_prs(
         .query(&[("page", filters.page)])
         .query(&[("per_page", filters.per_page)]);
 
-    let prs: Vec<GitHubPullRequest> = request
+    request
         .send()
         .context("Failed to fetch pull requests from GitHub API")?
-        .json()
-        .context("Failed to parse GitHub API response")?;
-    let mut filtered: Vec<GitHubPullRequest> = prs;
+        .try_into()
+        .context("Failed to parse GitHub API response")
+        .map(|response: PaginatedResponse<GitHubPullRequest>| {
+            // Apply client-side filters
+            response.filter_map(|pr| {
+                let state_matches = match filters.state {
+                    PrState::Merged => pr.merged_at.is_some(),
+                    PrState::Closed => pr.merged_at.is_none(),
+                    _ => true,
+                };
 
-    match filters.state {
-        PrState::Merged => filtered.retain(|pr| pr.merged_at.is_some()),
-        PrState::Closed => filtered.retain(|pr| pr.merged_at.is_none()),
-        _ => {}
-    }
+                let author_matches = filters
+                    .author
+                    .map(|author_name| pr.user.login == author_name)
+                    .unwrap_or(true);
 
-    if let Some(author_name) = filters.author {
-        filtered.retain(|pr| pr.user.login == author_name);
-    }
+                let labels_match = filters.labels.is_empty()
+                    || filters
+                        .labels
+                        .iter()
+                        .all(|label| pr.labels.iter().any(|l| &l.name == label));
 
-    if !filters.labels.is_empty() {
-        filtered.retain(|pr| {
-            filters
-                .labels
-                .iter()
-                .all(|label| pr.labels.iter().any(|l| &l.name == label))
-        });
-    }
+                let draft_matches = !filters.draft || pr.draft.unwrap_or(false);
 
-    if filters.draft {
-        filtered.retain(|pr| pr.draft.unwrap_or(false));
-    }
-
-    Ok(filtered.into_iter().map(Into::into).collect())
+                if state_matches && author_matches && labels_match && draft_matches {
+                    Some(pr.into())
+                } else {
+                    None
+                }
+            })
+        })
 }
 
 pub fn create_pr(
