@@ -23,7 +23,7 @@ pub fn guess_api_type_from_host(host: &str) -> anyhow::Result<ApiType> {
     }
 
     anyhow::bail!(
-        "Unable to detect forge type from hostname. Supported: github, gitlab, gitea, forgejo. Use --api flag to specify explicitly"
+        "Unable to detect forge type from hostname '{host}'. Supported keywords: github, gitlab, gitea, forgejo. Use --api to specify the forge type explicitly."
     )
 }
 

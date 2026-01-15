@@ -12,13 +12,12 @@ use anyhow::Context;
 /// format.
 pub fn get_remote_data(remote: &str) -> anyhow::Result<GitRemoteData> {
     let remote_url = get_remote_url(remote)
-        .with_context(|| format!("Failed to get URL for remote '{}'", remote))?;
+        .with_context(|| format!("Failed to get URL for remote '{remote}'"))?;
 
     match parse_remote_url(&remote_url) {
         Some(remote_data) => Ok(remote_data),
         None => anyhow::bail!(
-            "Couldn't parse git remote URL. Unrecognized format. Supported: https and ssh. Found remote URL: {}",
-            &remote_url
+            "Couldn't parse git remote URL. Unrecognized format. Supported: https and ssh. Found remote URL: {remote_url}",
         ),
     }
 }
@@ -33,12 +32,18 @@ pub fn get_remote_url(remote: &str) -> anyhow::Result<String> {
     let output = Command::new("git")
         .args(["remote", "get-url", remote])
         .output()
-        .with_context(|| format!("Failed to execute git command for remote '{}'", remote))?;
+        .with_context(|| format!("Failed to execute git command for remote '{remote}'"))?;
 
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
         anyhow::bail!(
-            "Git command failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
+            "Remote '{remote}' not found. {}",
+            if !stderr.is_empty() {
+                stderr
+            } else {
+                String::from("Run 'git remote -v' to see available remotes.")
+            }
         );
     }
 
@@ -73,12 +78,7 @@ pub fn checkout_branch(branch_name: &str) -> anyhow::Result<()> {
     let output = Command::new("git")
         .args(["checkout", branch_name])
         .output()
-        .with_context(|| {
-            format!(
-                "Failed to execute git checkout for branch '{}'",
-                branch_name
-            )
-        })?;
+        .with_context(|| format!("Failed to execute git checkout for branch '{branch_name}'"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -109,7 +109,7 @@ pub fn get_current_branch() -> anyhow::Result<String> {
     let branch = branch.trim();
 
     if branch.is_empty() {
-        anyhow::bail!("No branch checked out.");
+        anyhow::bail!("No branch is currently checked out (detached HEAD state)");
     }
 
     Ok(branch.to_string())
@@ -127,7 +127,7 @@ pub fn get_default_branch(remote: &str) -> anyhow::Result<String> {
     let output = Command::new("git")
         .args(["symbolic-ref", &format!("refs/remotes/{remote}/HEAD")])
         .output()
-        .with_context(|| format!("Failed to get default branch for '{}'", remote))?;
+        .with_context(|| format!("Failed to get default branch for '{remote}'"))?;
 
     if output.status.success() {
         let ref_name = String::from_utf8_lossy(&output.stdout);
@@ -144,8 +144,7 @@ pub fn get_default_branch(remote: &str) -> anyhow::Result<String> {
             .output()
             .with_context(|| {
                 format!(
-                    "Failed to get default branch when falling back to main or master for '{}'",
-                    remote
+                    "Failed to get default branch when falling back to main or master for '{remote}'",
                 )
             })?;
 
@@ -154,7 +153,9 @@ pub fn get_default_branch(remote: &str) -> anyhow::Result<String> {
         }
     }
 
-    anyhow::bail!("Couldn't determine default branch")
+    anyhow::bail!(
+        "Could not determine the default branch for remote '{remote}'. Try running 'git fetch {remote}' or specify --target explicitly.",
+    )
 }
 
 /// Pushes a branch to a remote.
@@ -172,7 +173,7 @@ pub fn push_branch(branch: &str, remote: &str, set_upstream: bool) -> anyhow::Re
     let output = Command::new("git")
         .args(&args)
         .output()
-        .with_context(|| format!("Failed to execute git push for branch '{}'", branch))?;
+        .with_context(|| format!("Failed to execute git push for branch '{branch}'"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -197,14 +198,14 @@ pub fn rev_parse(arg: &str) -> anyhow::Result<String> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
 
-        anyhow::bail!("Failed to git rev-parse {arg}: {stderr}");
+        anyhow::bail!("Failed to resolve '{arg}' to a commit: {stderr}");
     }
 
     let sha = String::from_utf8_lossy(&output.stdout);
     let sha = sha.trim();
 
     if sha.is_empty() {
-        anyhow::bail!("No commit hash");
+        anyhow::bail!("git rev-parse returned no commit hash for '{arg}'");
     }
 
     Ok(sha.to_string())
@@ -265,7 +266,7 @@ pub fn get_commit_message(commit_sha: &str) -> anyhow::Result<(String, String)> 
     let output = Command::new("git")
         .args(["log", "-1", "--format=%s%n%n%b", commit_sha])
         .output()
-        .with_context(|| format!("Failed to get commit message for {}", commit_sha))?;
+        .with_context(|| format!("Failed to get commit message for {commit_sha}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -375,7 +376,7 @@ fn parse_host_port(host_str: &str) -> anyhow::Result<(String, Option<u16>)> {
 
         match port_str.parse::<u16>() {
             Ok(port) => Ok((host, Some(port))),
-            Err(_) => anyhow::bail!("Invalid port number: {}", port_str),
+            Err(_) => anyhow::bail!("Invalid port number: {port_str}"),
         }
     } else {
         Ok((host_str.to_string(), None))

@@ -257,10 +257,10 @@ fn browse_path(
     };
     let path_buf = PathBuf::from(file_path)
         .canonicalize()
-        .with_context(|| format!("Failed to canonicalize the given file path: {}", file_path))?;
+        .with_context(|| format!("File not found: {file_path}"))?;
     let file_path = path_buf
         .strip_prefix(git::get_absolute_repo_root()?)
-        .context("Failed to resolve relative file path")?;
+        .context("The specified file is not within the current git repository")?;
     let file_path = path_with_forward_slashes(file_path);
     let get_path_url = match api_type {
         ApiType::GitHub => github::get_url_for_path,
@@ -283,6 +283,8 @@ fn print_or_open(url: &str, no_browser: bool) -> anyhow::Result<()> {
     if no_browser {
         println!("{url}");
     } else {
+        eprintln!("Opening {url} in browser...");
+
         open::that(url)?;
     }
 

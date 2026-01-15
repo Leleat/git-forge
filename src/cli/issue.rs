@@ -451,6 +451,8 @@ fn list_issues_interactively(
         args.state,
     );
 
+    eprintln!("Loading issues...");
+
     let issue = select_issue_interactively(
         remote,
         api_type,
@@ -571,7 +573,7 @@ fn create_issue_with_text_editor(
     }?;
 
     if message.title.is_empty() {
-        anyhow::bail!("Title cannot be empty.");
+        anyhow::bail!("Issue title cannot be empty. Please provide a title on the first line.");
     }
 
     create_issue_via_api(

@@ -4,7 +4,7 @@ use url::form_urlencoded::byte_serialize;
 
 use crate::{
     cli::{
-        forge::http_client::{HttpClient, PaginatedResponse, WithAuth},
+        forge::http_client::{HttpClient, PaginatedResponse, WithAuth, WithHttpStatusOk},
         issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
@@ -135,12 +135,13 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    request
+    let response: PaginatedResponse<GitLabIssue> = request
         .send()
-        .context("Failed to fetch issues from GitLab API")?
-        .try_into()
-        .context("Failed to parse GitLab API response")
-        .map(|response: PaginatedResponse<GitLabIssue>| response.map(Into::into))
+        .context("Network request failed while fetching issues from GitLab")?
+        .with_http_status_ok()?
+        .try_into()?;
+
+    Ok(response.map(Into::into))
 }
 
 pub fn create_issue(
@@ -160,12 +161,15 @@ pub fn create_issue(
         "description": options.body,
     });
 
+    eprintln!("Creating issue on GitLab...");
+
     let issue: GitLabIssue = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
         .json(&request_body)
         .send()
-        .context("Failed to create issue on GitLab")?
+        .context("Network request failed while creating issue on GitLab")?
+        .with_http_status_ok()?
         .json()
         .context("Failed to parse GitLab API response")?;
 
@@ -208,12 +212,13 @@ pub fn get_prs(
         request = request.query(&[("wip", "yes")]);
     }
 
-    request
+    let response: PaginatedResponse<GitLabMergeRequest> = request
         .send()
-        .context("Failed to fetch merge requests from GitLab API")?
-        .try_into()
-        .context("Failed to parse GitLab API response")
-        .map(|response: PaginatedResponse<GitLabMergeRequest>| response.map(Into::into))
+        .context("Network request failed while fetching merge requests from GitLab")?
+        .with_http_status_ok()?
+        .try_into()?;
+
+    Ok(response.map(Into::into))
 }
 
 pub fn create_pr(
@@ -235,12 +240,15 @@ pub fn create_pr(
         "description": options.body,
     });
 
+    eprintln!("Creating merge request on GitLab...");
+
     let mr: GitLabMergeRequest = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
         .json(&request_body)
         .send()
-        .context("Failed to create merge request on GitLab")?
+        .context("Network request failed while creating merge request on GitLab")?
+        .with_http_status_ok()?
         .json()
         .context("Failed to parse GitLab API response")?;
 
