@@ -4,6 +4,7 @@ use anyhow::Context;
 use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Input;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::{
     cli::{
@@ -12,6 +13,7 @@ use crate::{
     },
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
+    tui::{self, FetchOptions, ListableItem},
 };
 
 // =============================================================================
@@ -72,12 +74,21 @@ pub struct IssueListCommandArgs {
     #[arg(long)]
     format: Option<OutputFormat>,
 
+    /// Use interactive TUI for searching and selecting an issue
+    #[arg(short, long, group = "interaction-type")]
+    interactive: bool,
+
     /// Filter by labels (comma-separated)
     #[arg(long, value_delimiter = ',')]
     labels: Vec<String>,
 
     /// Page number to fetch
-    #[arg(long, default_value_t = 1, value_name = "NUMBER")]
+    #[arg(
+        long,
+        default_value_t = 1,
+        group = "interaction-type",
+        value_name = "NUMBER"
+    )]
     page: u32,
 
     /// Number of issues per page
@@ -129,6 +140,12 @@ impl MergableWithConfig for IssueListCommandArgs {
 
         if self.state.is_none() {
             self.state = config.get_enum("issue/list/state", remote);
+        }
+
+        if !self.interactive {
+            self.interactive = config
+                .get_bool("issue/list/interactive", remote)
+                .unwrap_or_default();
         }
     }
 }
@@ -238,7 +255,7 @@ pub enum IssueField {
 }
 
 /// An issue from a git forge.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Issue {
     /// The issue number (e.g., #42).
     pub id: u32,
@@ -252,6 +269,12 @@ pub struct Issue {
     pub url: String,
     /// Labels attached to this issue.
     pub labels: Vec<String>,
+}
+
+impl ListableItem for Issue {
+    fn get_display_text(&self) -> String {
+        format!("{}: {}", self.id, self.title)
+    }
 }
 
 pub struct ListIssueFilters<'a> {
@@ -292,7 +315,9 @@ pub fn list_issues(mut args: IssueListCommandArgs) -> anyhow::Result<()> {
             .with_context(|| format!("Failed to guess forge from host: {}", &remote.host))?,
     };
 
-    if args.web {
+    if args.interactive {
+        list_issues_interactively(remote, api_type, args)
+    } else if args.web {
         list_issues_in_web_browser(&remote, &api_type)
     } else {
         list_issues_to_stdout(
@@ -398,7 +423,7 @@ fn list_issues_to_stdout(
         ApiType::GitLab => gitlab::get_issues,
         ApiType::Gitea | ApiType::Forgejo => gitea::get_issues,
     };
-    let issues = get_issues(&HttpClient::new(), remote, api_url, filters, use_auth)
+    let response = get_issues(&HttpClient::new(), remote, api_url, filters, use_auth)
         .context("Failed fetching issues")?;
 
     let fields = if fields.is_empty() {
@@ -407,11 +432,118 @@ fn list_issues_to_stdout(
         fields
     };
 
-    if !issues.is_empty() {
-        println!("{}", io::format(&issues, &fields, output_format)?);
+    if !response.items.is_empty() {
+        println!("{}", io::format(&response.items, &fields, output_format)?);
     }
 
     Ok(())
+}
+
+fn list_issues_interactively(
+    remote: GitRemoteData,
+    api_type: ApiType,
+    args: IssueListCommandArgs,
+) -> anyhow::Result<()> {
+    let fetch_options = build_fetch_options_for_interactive_selection(
+        args.assignee,
+        args.author,
+        args.labels,
+        args.state,
+    );
+
+    let issue = select_issue_interactively(
+        remote,
+        api_type,
+        args.api_url,
+        fetch_options,
+        args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+        args.auth,
+    )?;
+
+    let output_format = args.format.unwrap_or_default();
+    let fields = if args.fields.is_empty() {
+        vec![IssueField::Title, IssueField::Id, IssueField::Url]
+    } else {
+        args.fields
+    };
+
+    println!("{}", io::format(&[&issue], &fields, &output_format)?);
+
+    if args.web {
+        open::that(issue.url)?;
+    }
+
+    Ok(())
+}
+
+fn build_fetch_options_for_interactive_selection(
+    assignee: Option<String>,
+    author: Option<String>,
+    labels: Vec<String>,
+    state: Option<IssueState>,
+) -> FetchOptions {
+    let mut options_map = HashMap::new();
+
+    if let Some(assignee) = assignee {
+        options_map.insert(String::from("assignee"), assignee);
+    }
+
+    if let Some(author) = author {
+        options_map.insert(String::from("author"), author);
+    }
+
+    if !labels.is_empty() {
+        options_map.insert(String::from("labels"), labels.join(","));
+    }
+
+    if let Some(state) = state {
+        options_map.insert(String::from("state"), state.to_string());
+    }
+
+    FetchOptions::new(options_map)
+}
+
+fn select_issue_interactively(
+    remote: GitRemoteData,
+    api_type: ApiType,
+    api_url: Option<String>,
+    initial_options: FetchOptions,
+    per_page: u32,
+    use_auth: bool,
+) -> anyhow::Result<Issue> {
+    let get_issues = match api_type {
+        ApiType::GitHub => github::get_issues,
+        ApiType::GitLab => gitlab::get_issues,
+        ApiType::Gitea | ApiType::Forgejo => gitea::get_issues,
+    };
+
+    let http_client = HttpClient::new();
+
+    tui::select_item_with(initial_options, move |page, options, result| {
+        let assignee = options.parse_str("assignee");
+        let author = options.parse_str("author");
+        let labels = options.parse_list("labels").unwrap_or_default();
+        let issue_state = options.parse_enum("state").unwrap_or_default();
+
+        let response = get_issues(
+            &http_client,
+            &remote,
+            api_url.as_deref(),
+            &ListIssueFilters {
+                author,
+                labels: &labels,
+                page,
+                per_page,
+                state: &issue_state,
+                assignee,
+            },
+            use_auth,
+        )?;
+
+        Ok(result
+            .with_items(response.items)
+            .with_more_items(response.has_next_page))
+    })
 }
 
 fn create_issue_via_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {

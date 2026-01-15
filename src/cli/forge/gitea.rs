@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::{
     cli::{
-        forge::http_client::{HttpClient, WithAuth},
+        forge::http_client::{HttpClient, PaginatedResponse, WithAuth},
         issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
@@ -112,7 +112,7 @@ pub fn get_issues(
     api_url: Option<&str>,
     filters: &ListIssueFilters,
     use_auth: bool,
-) -> anyhow::Result<Vec<Issue>> {
+) -> anyhow::Result<PaginatedResponse<Issue>> {
     let base_url = match api_url {
         Some(url) => url,
         None => &build_api_base_url(remote),
@@ -139,19 +139,18 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    let issues = request
+    // Filter out pull requests (Gitea's /issues endpoint includes PRs)
+    request
         .send()
         .context("Failed to fetch issues from Gitea/Forgejo API")?
-        .json::<Vec<GiteaIssue>>()
-        .context("Failed to parse Gitea/Forgejo API response")?
-        .into_iter()
-        .filter_map(|i| match i.pull_request {
-            Some(_) => None,
-            None => Some(i.into()),
+        .try_into()
+        .context("Failed to parse Gitea/Forgejo API response")
+        .map(|response: PaginatedResponse<GiteaIssue>| {
+            response.filter_map(|i| match i.pull_request {
+                Some(_) => None,
+                None => Some(i.into()),
+            })
         })
-        .collect::<Vec<Issue>>();
-
-    Ok(issues)
 }
 
 pub fn create_issue(
@@ -188,7 +187,7 @@ pub fn get_prs(
     api_url: Option<&str>,
     filters: &ListPrsFilters,
     use_auth: bool,
-) -> anyhow::Result<Vec<Pr>> {
+) -> anyhow::Result<PaginatedResponse<Pr>> {
     let base_url = match api_url {
         Some(url) => url,
         None => &build_api_base_url(remote),
@@ -202,37 +201,40 @@ pub fn get_prs(
         .query(&[("page", filters.page)])
         .query(&[("limit", filters.per_page)]);
 
-    let prs: Vec<GiteaPullRequest> = request
+    request
         .send()
         .context("Failed to fetch pull requests from Gitea/Forgejo API")?
-        .json()
-        .context("Failed to parse Gitea/Forgejo API response")?;
-    let mut filtered: Vec<GiteaPullRequest> = prs;
+        .try_into()
+        .context("Failed to parse Gitea/Forgejo API response")
+        .map(|response: PaginatedResponse<GiteaPullRequest>| {
+            response.filter_map(|pr| {
+                // Apply client-side filters
+                let state_matches = match filters.state {
+                    PrState::Merged => pr.merged,
+                    PrState::Closed => !pr.merged,
+                    _ => true,
+                };
 
-    match filters.state {
-        PrState::Merged => filtered.retain(|pr| pr.merged),
-        PrState::Closed => filtered.retain(|pr| !pr.merged),
-        _ => {}
-    }
+                let author_matches = filters
+                    .author
+                    .map(|author_name| pr.user.login == author_name)
+                    .unwrap_or(true);
 
-    if let Some(author_name) = filters.author {
-        filtered.retain(|pr| pr.user.login == author_name);
-    }
+                let labels_match = filters.labels.is_empty()
+                    || filters
+                        .labels
+                        .iter()
+                        .all(|label| pr.labels.iter().any(|l| &l.name == label));
 
-    if !filters.labels.is_empty() {
-        filtered.retain(|pr| {
-            filters
-                .labels
-                .iter()
-                .all(|label| pr.labels.iter().any(|l| &l.name == label))
-        });
-    }
+                let draft_matches = !filters.draft || pr.draft;
 
-    if filters.draft {
-        filtered.retain(|pr| pr.draft);
-    }
-
-    Ok(filtered.into_iter().map(Into::into).collect())
+                if state_matches && author_matches && labels_match && draft_matches {
+                    Some(pr.into())
+                } else {
+                    None
+                }
+            })
+        })
 }
 
 pub fn create_pr(
