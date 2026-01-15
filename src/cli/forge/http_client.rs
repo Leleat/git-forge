@@ -1,4 +1,4 @@
-use anyhow::Error;
+use anyhow::Context;
 use reqwest::blocking::{RequestBuilder, Response};
 use serde::de::DeserializeOwned;
 
@@ -69,7 +69,7 @@ impl<T> TryFrom<Response> for PaginatedResponse<T>
 where
     T: DeserializeOwned,
 {
-    type Error = Error;
+    type Error = anyhow::Error;
 
     fn try_from(value: Response) -> Result<Self, Self::Error> {
         // Forges use Link headers for pagination
@@ -84,7 +84,9 @@ where
             })
             .unwrap_or(false);
 
-        let items = value.json::<Vec<T>>()?;
+        let items = value
+            .json::<Vec<T>>()
+            .context("Failed to parse API response")?;
 
         Ok(PaginatedResponse::new(items, has_next_page))
     }
@@ -120,5 +122,31 @@ impl WithAuth for RequestBuilder {
         };
 
         Ok(self.header("Authorization", format!("{auth_scheme} {token}")))
+    }
+}
+
+pub trait WithHttpStatusOk {
+    /// Middleware to make sure that we have a 200 status.
+    fn with_http_status_ok(self) -> anyhow::Result<Response>;
+}
+
+impl WithHttpStatusOk for Response {
+    fn with_http_status_ok(self) -> anyhow::Result<Response> {
+        let url = self.url().to_string();
+        let status = self.status();
+
+        if !status.is_success() {
+            let error_body = self
+                .text()
+                .unwrap_or_else(|_| String::from("(unable to read response body)"));
+
+            anyhow::bail!(
+                "HTTP {status}\n\
+                 URL: {url}\n\
+                 Response: {error_body}",
+            );
+        }
+
+        Ok(self)
     }
 }

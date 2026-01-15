@@ -518,7 +518,7 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
         Err(ref e) => match args.api {
             Some(api_type) => api_type,
             None => anyhow::bail!(
-                "No API type was provided and failed to guess it from the git remote URL: {e}"
+                "Could not detect the forge type from the remote URL: {e}\nSpecify the forge type explicitly with --api (github|gitlab|gitea|forgejo)"
             ),
         },
     };
@@ -537,6 +537,8 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
                 args.labels,
                 args.state,
             );
+
+            eprintln!("Loading pull requests...");
 
             let pr = select_pr_interactively(
                 remote,
@@ -581,7 +583,7 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
     let target_branch = match args.target {
         Some(target) => target,
         None => git::get_default_branch(&remote_name)
-            .context("Couldn't create a PR. You can provide a --target explicitly.")?,
+            .context("Could not determine the target branch for this PR")?,
     };
 
     if current_branch == target_branch {
@@ -665,8 +667,10 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
     )?;
 
     if args.no_browser {
-        println!("PR created at {}", pr.url);
+        println!("{}", pr.url);
     } else {
+        eprintln!("Opening PR in browser: {}", pr.url);
+
         open::that(pr.url)?;
     }
 
@@ -686,7 +690,7 @@ fn get_title_and_body_for_pr_for_editor_flag(
     }?;
 
     if message.title.is_empty() {
-        anyhow::bail!("Title cannot be empty.");
+        anyhow::bail!("PR title cannot be empty. Please provide a title on the first line.");
     }
 
     Ok((message.title, message.body))
@@ -828,6 +832,8 @@ fn list_prs_interactively(
         args.labels,
         args.state,
     );
+
+    eprintln!("Loading pull requests...");
 
     let pr = select_pr_interactively(
         remote,

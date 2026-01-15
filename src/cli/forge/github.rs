@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::{
     cli::{
-        forge::http_client::{HttpClient, PaginatedResponse, WithAuth},
+        forge::http_client::{HttpClient, PaginatedResponse, WithAuth, WithHttpStatusOk},
         issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
@@ -139,18 +139,18 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    // Filter out pull requests (GitHub's /issues endpoint includes PRs)
-    request
+    let response: PaginatedResponse<GitHubIssue> = request
         .send()
-        .context("Failed to fetch issues from GitHub API")?
-        .try_into()
-        .context("Failed to parse GitHub API response")
-        .map(|response: PaginatedResponse<GitHubIssue>| {
-            response.filter_map(|i| match i.pull_request {
-                Some(_) => None,
-                None => Some(i.into()),
-            })
-        })
+        .context("Network request failed while fetching issues from GitHub")?
+        .with_http_status_ok()?
+        .try_into()?;
+
+    let filtered_resposne = response.filter_map(|i| match i.pull_request {
+        Some(_) => None,
+        None => Some(i.into()),
+    });
+
+    Ok(filtered_resposne)
 }
 
 pub fn create_issue(
@@ -169,13 +169,17 @@ pub fn create_issue(
         "title": options.title,
         "body": options.body,
     });
+
+    eprintln!("Creating issue on GitHub...");
+
     let issue: GitHubIssue = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
         .header("Accept", "application/vnd.github+json")
         .json(&request_body)
         .send()
-        .context("Failed to create issue on GitHub")?
+        .context("Network request failed while creating issue on GitHub")?
+        .with_http_status_ok()?
         .json()
         .context("Failed to parse GitHub API response")?;
 
@@ -203,40 +207,41 @@ pub fn get_prs(
         .query(&[("page", filters.page)])
         .query(&[("per_page", filters.per_page)]);
 
-    request
+    let response: PaginatedResponse<GitHubPullRequest> = request
         .send()
-        .context("Failed to fetch pull requests from GitHub API")?
-        .try_into()
-        .context("Failed to parse GitHub API response")
-        .map(|response: PaginatedResponse<GitHubPullRequest>| {
-            // Apply client-side filters
-            response.filter_map(|pr| {
-                let state_matches = match filters.state {
-                    PrState::Merged => pr.merged_at.is_some(),
-                    PrState::Closed => pr.merged_at.is_none(),
-                    _ => true,
-                };
+        .context("Network request failed while fetching pull requests from GitHub")?
+        .with_http_status_ok()?
+        .try_into()?;
 
-                let author_matches = filters
-                    .author
-                    .map(|author_name| pr.user.login == author_name)
-                    .unwrap_or(true);
+    // Client-side filters
+    let filtered_response = response.filter_map(|pr| {
+        let state_matches = match filters.state {
+            PrState::Merged => pr.merged_at.is_some(),
+            PrState::Closed => pr.merged_at.is_none(),
+            _ => true,
+        };
 
-                let labels_match = filters.labels.is_empty()
-                    || filters
-                        .labels
-                        .iter()
-                        .all(|label| pr.labels.iter().any(|l| &l.name == label));
+        let author_matches = filters
+            .author
+            .map(|author_name| pr.user.login == author_name)
+            .unwrap_or(true);
 
-                let draft_matches = !filters.draft || pr.draft.unwrap_or(false);
+        let labels_match = filters.labels.is_empty()
+            || filters
+                .labels
+                .iter()
+                .all(|label| pr.labels.iter().any(|l| &l.name == label));
 
-                if state_matches && author_matches && labels_match && draft_matches {
-                    Some(pr.into())
-                } else {
-                    None
-                }
-            })
-        })
+        let draft_matches = !filters.draft || pr.draft.unwrap_or(false);
+
+        if state_matches && author_matches && labels_match && draft_matches {
+            Some(pr.into())
+        } else {
+            None
+        }
+    });
+
+    Ok(filtered_response)
 }
 
 pub fn create_pr(
@@ -259,13 +264,16 @@ pub fn create_pr(
         "draft": options.draft,
     });
 
+    eprintln!("Creating pull request on GitHub...");
+
     let pr: GitHubPullRequest = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
         .header("Accept", "application/vnd.github+json")
         .json(&request_body)
         .send()
-        .context("Failed to create pull request on GitHub")?
+        .context("Network request failed while creating pull request on GitHub")?
+        .with_http_status_ok()?
         .json()
         .context("Failed to parse GitHub API response")?;
 
