@@ -4,6 +4,7 @@ use anyhow::Context;
 use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Input;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::{
     cli::{
@@ -12,7 +13,7 @@ use crate::{
     },
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
-    tui::{self, ListableItem},
+    tui::{self, FetchOptions, ListableItem},
 };
 
 // =============================================================================
@@ -63,6 +64,18 @@ pub struct PrCheckoutCommandArgs {
     #[arg(long)]
     auth: bool,
 
+    /// Filter by author username for interactive selection
+    #[arg(long)]
+    author: Option<String>,
+
+    /// Filter to only draft PRs for interactive selection
+    #[arg(long)]
+    draft: bool,
+
+    /// Filter by labels (comma-separated) for interactive selection
+    #[arg(long, value_delimiter = ',')]
+    labels: Vec<String>,
+
     /// PR number to checkout. Omit for interactive selection
     number: Option<u32>,
 
@@ -73,6 +86,10 @@ pub struct PrCheckoutCommandArgs {
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
+
+    /// Filter by state for interactive selection
+    #[arg(long)]
+    state: Option<PrState>,
 }
 
 impl MergableWithConfig for PrCheckoutCommandArgs {
@@ -91,8 +108,22 @@ impl MergableWithConfig for PrCheckoutCommandArgs {
                 .unwrap_or_default();
         }
 
+        if self.author.is_none() {
+            self.author = config.get_string("pr/checkout/author", remote);
+        }
+
+        if !self.draft {
+            self.draft = config
+                .get_bool("pr/checkout/draft", remote)
+                .unwrap_or_default();
+        }
+
         if self.per_page.is_none() {
             self.per_page = config.get_u32("pr/checkout/per-page", remote);
+        }
+
+        if self.state.is_none() {
+            self.state = config.get_enum("pr/checkout/state", remote);
         }
     }
 }
@@ -483,10 +514,18 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
         Some(nr) => nr,
         None => {
             let remote = remote_result?;
+            let fetch_options = build_fetch_options_for_interactive_pr_checkout(
+                args.author,
+                args.draft,
+                args.labels,
+                args.state,
+            );
+
             let pr = select_pr_to_checkout(
                 remote,
                 api_type,
                 args.api_url,
+                fetch_options,
                 args.auth,
                 args.per_page.unwrap_or(DEFAULT_PER_PAGE),
             )?;
@@ -761,10 +800,38 @@ fn list_prs_to_stdout(
     Ok(())
 }
 
+fn build_fetch_options_for_interactive_pr_checkout(
+    author: Option<String>,
+    draft: bool,
+    labels: Vec<String>,
+    state: Option<PrState>,
+) -> FetchOptions {
+    let mut options_map = HashMap::new();
+
+    if let Some(author) = author {
+        options_map.insert(String::from("author"), author);
+    }
+
+    if draft {
+        options_map.insert(String::from("draft"), String::from("true"));
+    }
+
+    if !labels.is_empty() {
+        options_map.insert(String::from("labels"), labels.join(","));
+    }
+
+    if let Some(state) = state {
+        options_map.insert(String::from("state"), state.to_string());
+    }
+
+    FetchOptions::new(options_map)
+}
+
 fn select_pr_to_checkout(
     remote: GitRemoteData,
     api_type: ApiType,
     api_url: Option<String>,
+    initial_options: FetchOptions,
     use_auth: bool,
     per_page: u32,
 ) -> anyhow::Result<Pr> {
@@ -775,7 +842,7 @@ fn select_pr_to_checkout(
     };
     let http_client = HttpClient::new();
 
-    tui::select_item_with(move |page, options, result| {
+    tui::select_item_with(initial_options, move |page, options, result| {
         let author: Option<&str> = options.parse_str("author");
         let draft: bool = options.parse("draft").unwrap_or_default();
         let labels: Vec<String> = options.parse_list("labels").unwrap_or_default();

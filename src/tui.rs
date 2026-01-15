@@ -31,7 +31,7 @@ const SELECTION_PREFIX: &str = "> ";
 /// # Errors
 ///
 /// Returns an error if the selection was cancelled or the fetch fails.
-pub fn select_item_with<T, F>(fetch: F) -> anyhow::Result<T>
+pub fn select_item_with<T, F>(initial_options: FetchOptions, fetch: F) -> anyhow::Result<T>
 where
     T: ListableItem,
     F: Fn(u32, &FetchOptions, FetchResult<T>) -> anyhow::Result<FetchResult<T>>
@@ -39,7 +39,7 @@ where
         + Sync
         + 'static,
 {
-    let mut app = App::new(fetch);
+    let mut app = App::new(fetch, initial_options);
     let selected_index = ratatui::run(|terminal| {
         loop {
             terminal.draw(|frame| app.render(frame))?;
@@ -72,6 +72,10 @@ pub trait ListableItem: Clone + Send + 'static {
 pub struct FetchOptions(HashMap<String, String>);
 
 impl FetchOptions {
+    pub fn new(map: HashMap<String, String>) -> Self {
+        FetchOptions(map)
+    }
+
     /// Parses a simple value from the options map.
     pub fn parse<T: FromStr>(&self, key: &str) -> Option<T> {
         self.0.get(key).and_then(|v| v.parse::<T>().ok())
@@ -95,10 +99,6 @@ impl FetchOptions {
     /// Parses a str value from the options map.
     pub fn parse_str<'a>(&'a self, key: &str) -> Option<&'a str> {
         self.0.get(key).map(|s| s.as_str())
-    }
-
-    fn new() -> Self {
-        FetchOptions(HashMap::default())
     }
 
     fn as_hash_map(&self) -> &HashMap<String, String> {
@@ -174,7 +174,7 @@ struct ItemFetcher<T> {
 }
 
 impl<T: ListableItem> ItemFetcher<T> {
-    fn new<F>(fetch: F) -> Self
+    fn new<F>(fetch: F, initial_options: FetchOptions) -> Self
     where
         F: Fn(u32, &FetchOptions, FetchResult<T>) -> anyhow::Result<FetchResult<T>>
             + Send
@@ -183,7 +183,7 @@ impl<T: ListableItem> ItemFetcher<T> {
     {
         Self {
             status: FetchStatus::default(),
-            options: FetchOptions::default(),
+            options: initial_options,
             fetch: Arc::new(fetch),
         }
     }
@@ -581,7 +581,7 @@ struct App<T: ListableItem> {
 }
 
 impl<T: ListableItem> App<T> {
-    fn new<F>(fetch: F) -> Self
+    fn new<F>(fetch: F, initial_options: FetchOptions) -> Self
     where
         F: Fn(u32, &FetchOptions, FetchResult<T>) -> anyhow::Result<FetchResult<T>>
             + Send
@@ -590,7 +590,7 @@ impl<T: ListableItem> App<T> {
     {
         Self {
             mode: Mode::default(),
-            item_fetcher: ItemFetcher::new(fetch),
+            item_fetcher: ItemFetcher::new(fetch, initial_options),
             list: ListState::new(),
             pagination: PaginationState::default(),
             search: SearchState::default(),
@@ -1064,7 +1064,7 @@ impl<T: ListableItem> App<T> {
 }
 
 fn parse_fetch_options(query: &str) -> FetchOptions {
-    let mut options = FetchOptions::new();
+    let mut options = FetchOptions::default();
     let mut remaining_text = String::new();
 
     for word in query.split_whitespace() {
