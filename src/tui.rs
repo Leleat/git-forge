@@ -5,7 +5,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{self, Block, Borders, HighlightSpacing, Paragraph, Wrap},
 };
@@ -548,11 +548,22 @@ impl Default for PaginationState {
     }
 }
 
-#[derive(Default, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum Focus {
-    #[default]
     List,
     SearchBar,
+}
+
+#[derive(PartialEq)]
+enum Mode {
+    Normal(Focus),
+    Help(Focus),
+}
+
+impl Default for Mode {
+    fn default() -> Self {
+        Mode::Normal(Focus::List)
+    }
 }
 
 enum UserAction {
@@ -562,7 +573,7 @@ enum UserAction {
 }
 
 struct App<T: ListableItem> {
-    focus: Focus,
+    mode: Mode,
     item_fetcher: ItemFetcher<T>,
     list: ListState<T>,
     pagination: PaginationState,
@@ -578,7 +589,7 @@ impl<T: ListableItem> App<T> {
             + 'static,
     {
         Self {
-            focus: Focus::default(),
+            mode: Mode::default(),
             item_fetcher: ItemFetcher::new(fetch),
             list: ListState::new(),
             pagination: PaginationState::default(),
@@ -598,9 +609,12 @@ impl<T: ListableItem> App<T> {
             return UserAction::None;
         }
 
-        match self.focus {
-            Focus::List => self.handle_key_event_list_widget(code, modifiers),
-            Focus::SearchBar => self.handle_key_event_search_bar_widget(code, modifiers),
+        match self.mode {
+            Mode::Normal(Focus::List) => self.handle_key_event_list_widget(code, modifiers),
+            Mode::Normal(Focus::SearchBar) => {
+                self.handle_key_event_search_bar_widget(code, modifiers)
+            }
+            Mode::Help(_) => self.handle_key_event_help_widget(code, modifiers),
         }
     }
 
@@ -609,21 +623,19 @@ impl<T: ListableItem> App<T> {
     }
 
     fn render(&mut self, frame: &mut Frame) {
-        let rects = Layout::vertical([
-            Constraint::Min(3),
-            Constraint::Length(3),
-            Constraint::Length(2),
-        ])
-        .split(frame.area());
-
-        self.render_list(frame, rects[0]);
-        self.render_search_bar(frame, rects[1]);
-        self.render_info_bar(frame, rects[2]);
+        match self.mode {
+            Mode::Help(_) => {
+                self.render_help(frame);
+            }
+            Mode::Normal(_) => {
+                self.render_selection_ui(frame);
+            }
+        }
     }
 
     fn update(&mut self) -> anyhow::Result<()> {
         const LOAD_THRESHOLD: usize = 1;
-        let reached_end_of_page = self.focus == Focus::List
+        let reached_end_of_page = self.mode == Mode::Normal(Focus::List)
             && match self.list.selected_index() {
                 Some(selected) => {
                     self.list.items.len().saturating_sub(selected + 1) < LOAD_THRESHOLD
@@ -683,15 +695,20 @@ impl<T: ListableItem> App<T> {
         match code {
             KeyCode::Esc => UserAction::Quit,
             KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => UserAction::Quit,
+            KeyCode::Char('?') => {
+                self.mode = Mode::Help(Focus::List);
+
+                UserAction::None
+            }
             KeyCode::Char(char) => {
-                self.focus = Focus::SearchBar;
+                self.mode = Mode::Normal(Focus::SearchBar);
 
                 self.search.insert_char_at_cursor(char);
 
                 UserAction::None
             }
             KeyCode::Tab | KeyCode::BackTab => {
-                self.focus = Focus::SearchBar;
+                self.mode = Mode::Normal(Focus::SearchBar);
 
                 UserAction::None
             }
@@ -752,6 +769,11 @@ impl<T: ListableItem> App<T> {
             }
             KeyCode::Char('l') if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.search.clear();
+
+                UserAction::None
+            }
+            KeyCode::Char('?') if self.search.query.is_empty() => {
+                self.mode = Mode::Help(Focus::SearchBar);
 
                 UserAction::None
             }
@@ -826,7 +848,7 @@ impl<T: ListableItem> App<T> {
                 UserAction::None
             }
             KeyCode::Tab | KeyCode::BackTab => {
-                self.focus = Focus::List;
+                self.mode = Mode::Normal(Focus::List);
 
                 UserAction::None
             }
@@ -835,7 +857,7 @@ impl<T: ListableItem> App<T> {
 
                 self.search.save_to_history();
                 self.search.clear();
-                self.focus = Focus::List;
+                self.mode = Mode::Normal(Focus::List);
 
                 self.fetch_and_replace_items(fetch_options);
 
@@ -843,6 +865,37 @@ impl<T: ListableItem> App<T> {
             }
             _ => UserAction::None,
         }
+    }
+
+    fn handle_key_event_help_widget(
+        &mut self,
+        code: KeyCode,
+        modifiers: KeyModifiers,
+    ) -> UserAction {
+        match code {
+            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => UserAction::Quit,
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char(_) => {
+                if let Mode::Help(previous_focus) = self.mode {
+                    self.mode = Mode::Normal(previous_focus);
+                }
+
+                UserAction::None
+            }
+            _ => UserAction::None,
+        }
+    }
+
+    fn render_selection_ui(&mut self, frame: &mut Frame<'_>) {
+        let rects = Layout::vertical([
+            Constraint::Min(3),
+            Constraint::Length(3),
+            Constraint::Length(2),
+        ])
+        .split(frame.area());
+
+        self.render_list(frame, rects[0]);
+        self.render_search_bar(frame, rects[1]);
+        self.render_info_bar(frame, rects[2]);
     }
 
     fn render_list(&mut self, frame: &mut Frame, area: Rect) {
@@ -880,7 +933,7 @@ impl<T: ListableItem> App<T> {
                 .highlight_symbol(SELECTION_PREFIX)
                 .highlight_spacing(HighlightSpacing::Always);
 
-            if self.focus == Focus::List {
+            if self.mode == Mode::Normal(Focus::List) {
                 widget = widget.highlight_style(Style::new().fg(COLOR_FOCUS).bold());
             }
 
@@ -892,7 +945,7 @@ impl<T: ListableItem> App<T> {
 
     fn render_search_bar(&self, frame: &mut Frame, area: Rect) {
         let prefix = "> ";
-        let focus_color = if self.focus == Focus::SearchBar {
+        let focus_color = if self.mode == Mode::Normal(Focus::SearchBar) {
             COLOR_FOCUS
         } else {
             COLOR_DIM
@@ -909,7 +962,7 @@ impl<T: ListableItem> App<T> {
 
         frame.render_widget(search_box, area);
 
-        if self.focus == Focus::SearchBar {
+        if self.mode == Mode::Normal(Focus::SearchBar) {
             let cursor_x = area
                 .x
                 .saturating_add(prefix.len() as u16)
@@ -921,14 +974,58 @@ impl<T: ListableItem> App<T> {
         }
     }
 
+    fn render_help(&self, frame: &mut Frame) {
+        let areas =
+            Layout::vertical([Constraint::Percentage(100), Constraint::Min(2)]).split(frame.area());
+
+        let help_text = vec![
+            Line::from("List").bold(),
+            Line::from("  ↑/↓              Navigate items"),
+            Line::from("  Tab              Focus the search bar"),
+            Line::from("  Enter            Select current item"),
+            Line::from("  Esc              Abort selection"),
+            Line::from(""),
+            Line::from("Search Bar").bold(),
+            Line::from("  ↑/↓              Navigate search history"),
+            Line::from("  Ctrl+←/→         Navigate words"),
+            Line::from("  Alt+←/→          Delete words"),
+            Line::from("  Tab              Focus the list"),
+            Line::from("  Enter            Start search"),
+            Line::from("  Esc              Clear search, if it exists, otherwise abort selection"),
+            Line::from("  Ctrl+L           Clear search"),
+            Line::from("  Ctrl+a/Home      Go to line start"),
+            Line::from("  Ctrl+e/End       Go to line end"),
+            Line::from("  <text>           Filter items with plain text query"),
+            Line::from(
+                "  @<key>=<value>   Add fetch option. Check the subcommands help for possible options (flags), e.g., @state=open",
+            ),
+            Line::from(""),
+            Line::from(
+                "  For intance, 'crash @author=alice' searches for items containing 'crash' which where authored by the user 'alice'",
+            ),
+        ];
+        let help_widget = Paragraph::new(help_text)
+            .block(Block::new().padding(widgets::Padding::horizontal(1)))
+            .wrap(Wrap { trim: false });
+
+        let close_widget = Paragraph::new("Press any key to close Help...")
+            .block(Block::new().padding(widgets::Padding::horizontal(1)))
+            .style(Style::new().fg(COLOR_DIM))
+            .wrap(Wrap { trim: false });
+
+        frame.render_widget(help_widget, areas[0]);
+        frame.render_widget(close_widget, areas[1]);
+    }
+
     fn render_info_bar(&self, frame: &mut Frame, area: Rect) {
         let options = self.item_fetcher.options.as_hash_map();
         let status_text = if self.item_fetcher.is_fetching() {
             String::from("  Loading items...")
         } else if !options.is_empty() {
-            let mut status = String::new();
+            let mut status = String::from("  Search:");
 
             if let Some(query) = options.get("query") {
+                status.push(' ');
                 status.push_str(query);
             }
 
@@ -943,16 +1040,7 @@ impl<T: ListableItem> App<T> {
             String::new()
         };
 
-        let nav_text = match self.focus {
-            Focus::List => "↑↓: Navigate | Enter: Select | Esc: Quit | Tab: Switch Focus",
-            Focus::SearchBar => {
-                if self.search.has_query() {
-                    "Enter: Search | Esc: Clear Search | Tab: Switch Focus"
-                } else {
-                    "Enter: Search | Esc: Quit | Tab: Switch Focus"
-                }
-            }
-        };
+        let nav_text = "?: Show Help";
 
         let areas = Layout::horizontal([
             Constraint::Min(status_text.len().saturating_add(5) as u16),
