@@ -63,7 +63,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("Issue created at");
     });
 
     it("Should create issue with title and body", () => {
@@ -86,7 +85,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("Issue created at");
     });
 
     it("Should fail when creating issue without authentication", () => {

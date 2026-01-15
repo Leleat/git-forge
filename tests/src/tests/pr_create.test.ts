@@ -62,7 +62,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("PR created at");
     });
 
     it("Should create PR with custom title", () => {
@@ -85,7 +84,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("PR created at");
     });
 
     it("Should create PR with custom body", () => {
@@ -110,7 +108,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("PR created at");
     });
 
     it("Should create draft PR", () => {
@@ -134,7 +131,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("PR created at");
     });
 
     it("Should create PR with custom target branch", () => {
@@ -167,7 +163,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("PR created at");
     });
 
     it("Should create PR with title, body, and draft combined on GitHub", () => {
@@ -193,7 +188,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("PR created at");
     });
 
     it("Should fail if no token is set", () => {
@@ -258,7 +252,6 @@ describe.each([
         });
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("PR created at");
     });
 
     it("Should fail when using both --fill and --editor", () => {

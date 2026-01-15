@@ -604,8 +604,10 @@ fn create_issue_via_api(
     let issue = create_issue(&http_client, remote, api_url, create_options)?;
 
     if no_browser {
-        println!("Issue created at {}", issue.url);
+        println!("{}", issue.url);
     } else {
+        eprintln!("Opening issue in browser: {}", issue.url);
+
         open::that(&issue.url)?;
     }
 

@@ -667,8 +667,10 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
     )?;
 
     if args.no_browser {
-        println!("PR created at {}", pr.url);
+        println!("{}", pr.url);
     } else {
+        eprintln!("Opening PR in browser: {}", pr.url);
+
         open::that(pr.url)?;
     }
 
