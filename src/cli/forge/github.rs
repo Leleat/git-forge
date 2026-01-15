@@ -145,12 +145,12 @@ pub fn get_issues(
         .with_http_status_ok()?
         .try_into()?;
 
-    let filtered_resposne = response.filter_map(|i| match i.pull_request {
+    let filtered_response = response.filter_map(|i| match i.pull_request {
         Some(_) => None,
         None => Some(i.into()),
     });
 
-    Ok(filtered_resposne)
+    Ok(filtered_response)
 }
 
 pub fn create_issue(
