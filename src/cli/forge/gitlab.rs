@@ -135,13 +135,12 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    let response: PaginatedResponse<GitLabIssue> = request
+    request
         .send()
         .context("Network request failed while fetching issues from GitLab")?
         .with_http_status_ok()?
-        .try_into()?;
-
-    Ok(response.map(Into::into))
+        .try_into()
+        .map(|response: PaginatedResponse<GitLabIssue>| response.map(Into::into))
 }
 
 pub fn create_issue(
@@ -163,17 +162,18 @@ pub fn create_issue(
 
     eprintln!("Creating issue on GitLab...");
 
-    let issue: GitLabIssue = http_client
+    let request = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
-        .json(&request_body)
+        .json(&request_body);
+
+    request
         .send()
         .context("Network request failed while creating issue on GitLab")?
         .with_http_status_ok()?
         .json()
-        .context("Failed to parse GitLab API response")?;
-
-    Ok(issue.into())
+        .context("Failed to parse GitLab API response")
+        .map(|issue: GitLabIssue| issue.into())
 }
 
 pub fn get_prs(
@@ -212,13 +212,12 @@ pub fn get_prs(
         request = request.query(&[("wip", "yes")]);
     }
 
-    let response: PaginatedResponse<GitLabMergeRequest> = request
+    request
         .send()
         .context("Network request failed while fetching merge requests from GitLab")?
         .with_http_status_ok()?
-        .try_into()?;
-
-    Ok(response.map(Into::into))
+        .try_into()
+        .map(|response: PaginatedResponse<GitLabMergeRequest>| response.map(Into::into))
 }
 
 pub fn create_pr(
@@ -242,17 +241,18 @@ pub fn create_pr(
 
     eprintln!("Creating merge request on GitLab...");
 
-    let mr: GitLabMergeRequest = http_client
+    let request = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
-        .json(&request_body)
+        .json(&request_body);
+
+    request
         .send()
         .context("Network request failed while creating merge request on GitLab")?
         .with_http_status_ok()?
         .json()
-        .context("Failed to parse GitLab API response")?;
-
-    Ok(mr.into())
+        .context("Failed to parse GitLab API response")
+        .map(|mr: GitLabMergeRequest| mr.into())
 }
 
 pub fn get_pr_ref(pr_number: u32) -> String {
