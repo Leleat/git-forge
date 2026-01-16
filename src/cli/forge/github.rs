@@ -139,18 +139,17 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    let response: PaginatedResponse<GitHubIssue> = request
+    request
         .send()
-        .context("Network request failed while fetching issues from GitHub")?
+        .context("Failed to fetch issues from Gitea/Forgejo API")?
         .with_http_status_ok()?
-        .try_into()?;
-
-    let filtered_response = response.filter_map(|i| match i.pull_request {
-        Some(_) => None,
-        None => Some(i.into()),
-    });
-
-    Ok(filtered_response)
+        .try_into()
+        .map(|response: PaginatedResponse<GitHubIssue>| {
+            response.filter_map(|i| match i.pull_request {
+                Some(_) => None,
+                None => Some(i.into()),
+            })
+        })
 }
 
 pub fn create_issue(
@@ -172,18 +171,19 @@ pub fn create_issue(
 
     eprintln!("Creating issue on GitHub...");
 
-    let issue: GitHubIssue = http_client
+    let request = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
         .header("Accept", "application/vnd.github+json")
-        .json(&request_body)
+        .json(&request_body);
+
+    request
         .send()
         .context("Network request failed while creating issue on GitHub")?
         .with_http_status_ok()?
         .json()
-        .context("Failed to parse GitHub API response")?;
-
-    Ok(issue.into())
+        .context("Failed to parse GitHub API response")
+        .map(|issue: GitHubIssue| issue.into())
 }
 
 pub fn get_prs(
@@ -207,41 +207,40 @@ pub fn get_prs(
         .query(&[("page", filters.page)])
         .query(&[("per_page", filters.per_page)]);
 
-    let response: PaginatedResponse<GitHubPullRequest> = request
+    request
         .send()
         .context("Network request failed while fetching pull requests from GitHub")?
         .with_http_status_ok()?
-        .try_into()?;
+        .try_into()
+        .map(|response: PaginatedResponse<GitHubPullRequest>| {
+            // Client-side filtering
+            response.filter_map(|pr| {
+                let state_matches = match filters.state {
+                    PrState::Merged => pr.merged_at.is_some(),
+                    PrState::Closed => pr.merged_at.is_none(),
+                    _ => true,
+                };
 
-    // Client-side filters
-    let filtered_response = response.filter_map(|pr| {
-        let state_matches = match filters.state {
-            PrState::Merged => pr.merged_at.is_some(),
-            PrState::Closed => pr.merged_at.is_none(),
-            _ => true,
-        };
+                let author_matches = filters
+                    .author
+                    .map(|author_name| pr.user.login == author_name)
+                    .unwrap_or(true);
 
-        let author_matches = filters
-            .author
-            .map(|author_name| pr.user.login == author_name)
-            .unwrap_or(true);
+                let labels_match = filters.labels.is_empty()
+                    || filters
+                        .labels
+                        .iter()
+                        .all(|label| pr.labels.iter().any(|l| &l.name == label));
 
-        let labels_match = filters.labels.is_empty()
-            || filters
-                .labels
-                .iter()
-                .all(|label| pr.labels.iter().any(|l| &l.name == label));
+                let draft_matches = !filters.draft || pr.draft.unwrap_or(false);
 
-        let draft_matches = !filters.draft || pr.draft.unwrap_or(false);
-
-        if state_matches && author_matches && labels_match && draft_matches {
-            Some(pr.into())
-        } else {
-            None
-        }
-    });
-
-    Ok(filtered_response)
+                if state_matches && author_matches && labels_match && draft_matches {
+                    Some(pr.into())
+                } else {
+                    None
+                }
+            })
+        })
 }
 
 pub fn create_pr(
@@ -266,18 +265,19 @@ pub fn create_pr(
 
     eprintln!("Creating pull request on GitHub...");
 
-    let pr: GitHubPullRequest = http_client
+    let request = http_client
         .post(&url)
         .with_auth(true, AUTH_TOKEN, AUTH_SCHEME)?
         .header("Accept", "application/vnd.github+json")
-        .json(&request_body)
+        .json(&request_body);
+
+    request
         .send()
         .context("Network request failed while creating pull request on GitHub")?
         .with_http_status_ok()?
         .json()
-        .context("Failed to parse GitHub API response")?;
-
-    Ok(pr.into())
+        .context("Failed to parse GitHub API response")
+        .map(|pr: GitHubPullRequest| pr.into())
 }
 
 pub fn get_pr_ref(pr_number: u32) -> String {
