@@ -58,6 +58,7 @@ export function createGitLabServer(): express.Express {
                 labels,
                 assignee_username,
                 author_username,
+                search,
                 page = "1",
                 per_page = "30",
             } = req.query;
@@ -96,6 +97,14 @@ export function createGitLabServer(): express.Express {
                 );
             }
 
+            // Filter by search query
+            if (search && typeof search === "string") {
+                const searchTerm = search.toLowerCase();
+                filtered = filtered.filter((issue) =>
+                    issue.title.toLowerCase().includes(searchTerm),
+                );
+            }
+
             // Pagination
             const pageNum = Number.parseInt(page as string, 10);
             const perPage = Number.parseInt(per_page as string, 10);
@@ -116,6 +125,7 @@ export function createGitLabServer(): express.Express {
                 labels,
                 author_username,
                 wip,
+                search,
                 page = "1",
                 per_page = "30",
             } = req.query;
@@ -149,6 +159,14 @@ export function createGitLabServer(): express.Express {
             // Filter by draft/wip
             if (wip === "yes") {
                 filtered = filtered.filter((mr) => mr.draft === true);
+            }
+
+            // Filter by search query
+            if (search && typeof search === "string") {
+                const searchTerm = search.toLowerCase();
+                filtered = filtered.filter((mr) =>
+                    mr.title.toLowerCase().includes(searchTerm),
+                );
             }
 
             // Pagination

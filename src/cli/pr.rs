@@ -83,6 +83,10 @@ pub struct PrCheckoutCommandArgs {
     #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
     per_page: Option<u32>,
 
+    /// Search keywords
+    #[arg(short, long)]
+    query: Option<String>,
+
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
@@ -299,6 +303,10 @@ pub struct PrListCommandArgs {
     #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
     per_page: Option<u32>,
 
+    /// Search keywords
+    #[arg(short, long)]
+    query: Option<String>,
+
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
@@ -420,10 +428,6 @@ pub struct Pr {
     pub created_at: String,
     /// Timestamp when the pull request was last updated.
     pub updated_at: String,
-    /// The source branch (head) of the pull request.
-    pub source_branch: String,
-    /// The target branch (base) of the pull request.
-    pub target_branch: String,
     /// Whether the pull request is a draft.
     pub draft: bool,
 }
@@ -439,6 +443,7 @@ pub struct ListPrsFilters<'a> {
     pub labels: &'a [String],
     pub page: u32,
     pub per_page: u32,
+    pub query: Option<&'a str>,
     pub state: &'a PrState,
     pub draft: bool,
 }
@@ -489,6 +494,7 @@ pub fn list_prs(mut args: PrListCommandArgs) -> anyhow::Result<()> {
                 labels: &args.labels,
                 page: args.page,
                 per_page: args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+                query: args.query.as_deref(),
                 state: &args.state.unwrap_or_default(),
                 draft: args.draft,
             },
@@ -535,6 +541,7 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
                 args.author,
                 args.draft,
                 args.labels,
+                args.query,
                 args.state,
             );
 
@@ -830,6 +837,7 @@ fn list_prs_interactively(
         args.author,
         args.draft,
         args.labels,
+        args.query,
         args.state,
     );
 
@@ -864,6 +872,7 @@ fn build_fetch_options_for_interactive_selection(
     author: Option<String>,
     draft: bool,
     labels: Vec<String>,
+    query: Option<String>,
     state: Option<PrState>,
 ) -> FetchOptions {
     let mut options_map = HashMap::new();
@@ -878,6 +887,10 @@ fn build_fetch_options_for_interactive_selection(
 
     if !labels.is_empty() {
         options_map.insert(String::from("labels"), labels.join(","));
+    }
+
+    if let Some(query) = query {
+        options_map.insert(String::from("query"), query);
     }
 
     if let Some(state) = state {
@@ -907,6 +920,7 @@ fn select_pr_interactively(
         let author: Option<&str> = options.parse_str("author");
         let draft: bool = options.parse("draft").unwrap_or_default();
         let labels: Vec<String> = options.parse_list("labels").unwrap_or_default();
+        let query: Option<&str> = options.parse_str("query");
         let state: PrState = options.parse_enum("state").unwrap_or_default();
 
         let response = get_prs(
@@ -919,6 +933,7 @@ fn select_pr_interactively(
                 labels: &labels,
                 page,
                 per_page,
+                query,
                 state: &state,
             },
             use_auth,

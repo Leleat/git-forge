@@ -20,6 +20,9 @@ interface Issue {
     user: User;
     assignee: User | null;
     html_url: string;
+    created_at: string;
+    updated_at: string;
+    pull_request: null;
 }
 
 interface PullRequest {
@@ -59,20 +62,41 @@ export function createGiteaServer(): express.Express {
         "/api/v1/repos/:owner/:repo/issues",
         (req: Request, res: Response) => {
             const {
+                type,
                 state,
                 labels,
                 created_by,
                 assigned_by,
+                q,
                 page = "1",
                 limit = "30",
             } = req.query;
-            // Combine issues and PRs (Gitea's /issues endpoint returns both)
-            let filtered: (Issue | PullRequest)[] = [...issues, ...prs];
+
+            let filtered: (Issue | PullRequest)[] = [];
+
+            // Filter by type (issues or pulls)
+            if (type === "issues") {
+                filtered = [...issues];
+            } else if (type === "pulls") {
+                // For PRs, we need to transform them to include pull_request field
+                filtered = prs.map((pr) => ({
+                    ...pr,
+                    pull_request: {
+                        draft: pr.draft,
+                        merged: pr.merged,
+                    },
+                }));
+            } else {
+                // If no type specified, combine both
+                filtered = [...issues, ...prs];
+            }
 
             // Filter by state
-            if (state && ["open", "closed"].includes(state.toString())) {
+            if (state && ["open", "closed", "all"].includes(state.toString())) {
                 const s = state.toString();
-                filtered = filtered.filter((issue) => issue.state === s);
+                if (s !== "all") {
+                    filtered = filtered.filter((issue) => issue.state === s);
+                }
             }
 
             // Filter by labels
@@ -100,6 +124,14 @@ export function createGiteaServer(): express.Express {
             if (created_by) {
                 filtered = filtered.filter(
                     (issue) => issue.user.login === created_by,
+                );
+            }
+
+            // Filter by query (search in title)
+            if (q && typeof q === "string") {
+                const searchTerm = q.toLowerCase();
+                filtered = filtered.filter((issue) =>
+                    issue.title.toLowerCase().includes(searchTerm),
                 );
             }
 
@@ -212,6 +244,9 @@ export function createGiteaServer(): express.Express {
                 user: { login: "test-user" },
                 assignee: null,
                 html_url: `http://localhost:${GITEA_PORT}/${owner}/${repo}/issues/${issueNumber}`,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                pull_request: null,
             };
 
             issueNumber++;

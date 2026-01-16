@@ -162,11 +162,17 @@ describe.each([
                 "--draft",
             ],
             cwd: tempDir,
+            throwsError: forge === "gitea",
         });
 
-        expect(result.exitCode).toBe(0);
-        expectTsvFormat(result.stdout);
-        expect(parseTSV(result.stdout)).toHaveLength(2);
+        if (forge === "gitea") {
+            expect(result.exitCode).not.toBe(0);
+            expect(result.stderr).toContain("does not support");
+        } else {
+            expect(result.exitCode).toBe(0);
+            expectTsvFormat(result.stdout);
+            expect(parseTSV(result.stdout)).toHaveLength(2);
+        }
     });
 
     it("Should list pull requests filtered by labels (enhancement+ui)", () => {
@@ -282,11 +288,17 @@ describe.each([
                 "merged",
             ],
             cwd: tempDir,
+            throwsError: forge === "gitea",
         });
 
-        expect(result.exitCode).toBe(0);
-        expectTsvFormat(result.stdout);
-        expect(parseTSV(result.stdout)).toHaveLength(4);
+        if (forge === "gitea") {
+            expect(result.exitCode).not.toBe(0);
+            expect(result.stderr).toContain("does not support");
+        } else {
+            expect(result.exitCode).toBe(0);
+            expectTsvFormat(result.stdout);
+            expect(parseTSV(result.stdout)).toHaveLength(4);
+        }
     });
 
     it("Should list pull requests with state filter (closed)", () => {
@@ -306,7 +318,12 @@ describe.each([
 
         expect(result.exitCode).toBe(0);
         expectTsvFormat(result.stdout);
-        expect(parseTSV(result.stdout)).toHaveLength(1);
+
+        // Gitea returns all closed PRs (merged + not merged). GitHub/GitLab
+        // filter out merged PRs server-side
+        const expectedLength = forge === "gitea" ? 5 : 1;
+
+        expect(parseTSV(result.stdout)).toHaveLength(expectedLength);
     });
 
     it("Should list pull requests filtered by author (bob)", () => {
@@ -357,5 +374,52 @@ describe.each([
         expect(rows[0]).toHaveProperty("id");
         expect(rows[0]).toHaveProperty("title");
         expect(rows[0]).toHaveProperty("draft");
+    });
+
+    it("Should filter pull requests by query (Add)", () => {
+        const result = runGitForge({
+            args: [
+                "pr",
+                "list",
+                "--api",
+                forge,
+                "--api-url",
+                getApiUrl(forge),
+                "--query",
+                "Add",
+                "--fields",
+                "id,title,url",
+            ],
+            cwd: tempDir,
+        });
+
+        expect(result.exitCode).toBe(0);
+        expectTsvFormat(result.stdout);
+
+        const rows = parseTSV(result.stdout);
+
+        expect(rows).toHaveLength(3);
+        expect(rows[0].title.toLowerCase()).toContain("add");
+    });
+
+    it("Should return no results for PR query with no matches", () => {
+        const result = runGitForge({
+            args: [
+                "pr",
+                "list",
+                "--api",
+                forge,
+                "--api-url",
+                getApiUrl(forge),
+                "--query",
+                "nonexistentterm",
+                "--fields",
+                "id,title,url",
+            ],
+            cwd: tempDir,
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(parseTSV(result.stdout)).toHaveLength(0);
     });
 });

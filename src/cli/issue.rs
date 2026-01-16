@@ -95,6 +95,10 @@ pub struct IssueListCommandArgs {
     #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
     per_page: Option<u32>,
 
+    /// Search keywords
+    #[arg(short, long)]
+    query: Option<String>,
+
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
@@ -283,6 +287,7 @@ pub struct ListIssueFilters<'a> {
     pub labels: &'a [String],
     pub page: u32,
     pub per_page: u32,
+    pub query: Option<&'a str>,
     pub state: &'a IssueState,
 }
 
@@ -330,6 +335,7 @@ pub fn list_issues(mut args: IssueListCommandArgs) -> anyhow::Result<()> {
                 labels: &args.labels,
                 page: args.page,
                 per_page: args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+                query: args.query.as_deref(),
                 state: &args.state.unwrap_or_default(),
             },
             args.fields,
@@ -448,6 +454,7 @@ fn list_issues_interactively(
         args.assignee,
         args.author,
         args.labels,
+        args.query,
         args.state,
     );
 
@@ -482,6 +489,7 @@ fn build_fetch_options_for_interactive_selection(
     assignee: Option<String>,
     author: Option<String>,
     labels: Vec<String>,
+    query: Option<String>,
     state: Option<IssueState>,
 ) -> FetchOptions {
     let mut options_map = HashMap::new();
@@ -496,6 +504,10 @@ fn build_fetch_options_for_interactive_selection(
 
     if !labels.is_empty() {
         options_map.insert(String::from("labels"), labels.join(","));
+    }
+
+    if let Some(query) = query {
+        options_map.insert(String::from("query"), query);
     }
 
     if let Some(state) = state {
@@ -526,6 +538,7 @@ fn select_issue_interactively(
         let author = options.parse_str("author");
         let labels = options.parse_list("labels").unwrap_or_default();
         let issue_state = options.parse_enum("state").unwrap_or_default();
+        let query = options.parse_str("query");
 
         let response = get_issues(
             &http_client,
@@ -536,6 +549,7 @@ fn select_issue_interactively(
                 labels: &labels,
                 page,
                 per_page,
+                query,
                 state: &issue_state,
                 assignee,
             },
