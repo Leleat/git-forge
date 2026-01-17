@@ -306,6 +306,16 @@ struct SearchState {
 }
 
 impl SearchState {
+    fn with_history_entry(entry: String) -> Self {
+        let mut state = Self::default();
+
+        if !entry.is_empty() {
+            state.history.push(entry);
+        }
+
+        state
+    }
+
     fn clear(&mut self) {
         self.exit_history_browsing();
         self.query.clear();
@@ -588,12 +598,18 @@ impl<T: ListableItem> App<T> {
             + Sync
             + 'static,
     {
+        let search = if initial_options.as_hash_map().is_empty() {
+            SearchState::default()
+        } else {
+            SearchState::with_history_entry(format_fetch_options(&initial_options))
+        };
+
         Self {
             mode: Mode::default(),
             item_fetcher: ItemFetcher::new(fetch, initial_options),
             list: ListState::new(),
             pagination: PaginationState::default(),
-            search: SearchState::default(),
+            search,
         }
     }
 
@@ -1061,6 +1077,30 @@ impl<T: ListableItem> App<T> {
         frame.render_widget(status_bar, areas[0]);
         frame.render_widget(nav_bar, areas[1]);
     }
+}
+
+fn format_fetch_options(options: &FetchOptions) -> String {
+    let mut result = String::new();
+    let map = options.as_hash_map();
+
+    if let Some(query) = map.get("query") {
+        result.push_str(query);
+    }
+
+    let mut sorted_keys: Vec<_> = map.keys().filter(|k| k.as_str() != "query").collect();
+    sorted_keys.sort();
+
+    for key in sorted_keys {
+        if let Some(value) = map.get(key) {
+            if !result.is_empty() {
+                result.push(' ');
+            }
+
+            result.push_str(&format!("@{key}={value}"));
+        }
+    }
+
+    result
 }
 
 fn parse_fetch_options(query: &str) -> FetchOptions {
