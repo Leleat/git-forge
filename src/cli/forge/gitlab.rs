@@ -1,6 +1,5 @@
 use anyhow::Context;
 use serde::Deserialize;
-use url::form_urlencoded::byte_serialize;
 
 use crate::{
     cli::{
@@ -108,7 +107,7 @@ pub fn get_issues(
         Some(url) => url,
         None => &build_api_base_url(remote),
     };
-    let encoded_path = byte_serialize(remote.path.as_bytes()).collect::<String>();
+    let encoded_path = encode_repo_path(&remote.path);
     let url = format!("{base_url}/projects/{encoded_path}/issues");
     let state = match filters.state {
         IssueState::Open => "opened".to_string(),
@@ -160,7 +159,7 @@ pub fn create_issue(
         Some(url) => url,
         None => &build_api_base_url(remote),
     };
-    let encoded_path = byte_serialize(remote.path.as_bytes()).collect::<String>();
+    let encoded_path = encode_repo_path(&remote.path);
     let url = format!("{base_url}/projects/{encoded_path}/issues");
     let request_body = serde_json::json!({
         "title": options.title,
@@ -194,7 +193,7 @@ pub fn get_prs(
         Some(url) => url,
         None => &build_api_base_url(remote),
     };
-    let encoded_path = byte_serialize(remote.path.as_bytes()).collect::<String>();
+    let encoded_path = encode_repo_path(&remote.path);
     let url = format!("{base_url}/projects/{encoded_path}/merge_requests");
     let state = match filters.state {
         PrState::Open => "opened".to_string(),
@@ -246,7 +245,7 @@ pub fn create_pr(
         Some(url) => url,
         None => &build_api_base_url(remote),
     };
-    let encoded_path = byte_serialize(remote.path.as_bytes()).collect::<String>();
+    let encoded_path = encode_repo_path(&remote.path);
     let url = format!("{base_url}/projects/{encoded_path}/merge_requests");
     let request_body = serde_json::json!({
         "source_branch": options.source_branch,
@@ -348,4 +347,8 @@ fn build_web_base_url(remote: &GitRemoteData) -> String {
         Some(port) => format!("https://{host}:{port}/{path}"),
         None => format!("https://{host}/{path}"),
     }
+}
+
+fn encode_repo_path(repo_path: &str) -> String {
+    repo_path.replace("/", "%2F")
 }
