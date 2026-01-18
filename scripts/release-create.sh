@@ -44,7 +44,7 @@ assert_on_main_branch() {
 
 pull_latest_changes() {
     log_info "Pulling latest changes from main..."
-    git pull origin main
+    git pull --quiet origin main
 }
 
 assert_last_commit_updated_release_files() {
