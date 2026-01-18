@@ -110,6 +110,77 @@ impl FetchOptions {
     }
 }
 
+/// Builds FetchOptions from key-value pairs.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let options: FetchOptions = build_fetch_options! {
+///     "assignee": args.assignee,
+///     "author": args.author,
+///     "labels": args.labels,
+///     "state": args.state,
+///     "draft": args.draft,
+///};
+/// ```
+#[macro_export]
+macro_rules! build_fetch_options {
+    ($($key:literal: $field:expr),* $(,)?) => {
+        {
+            let mut options_map = std::collections::HashMap::new();
+
+            $(
+                $crate::tui::__macro_internals::InsertIntoFetchOption::__insert_into_fetch_option(
+                    $field,
+                    &mut options_map,
+                    String::from($key)
+                );
+            )*
+
+            $crate::tui::FetchOptions::new(options_map)
+        }
+    };
+}
+
+/// Internal module for macro implementation details.
+///
+/// This module is public only for macro access but hidden from documentation.
+#[doc(hidden)]
+pub mod __macro_internals {
+    use std::collections::HashMap;
+
+    pub trait InsertIntoFetchOption {
+        /// Helper function for inserting values into FetchOptions macro.
+        /// It isn't meant to be called manually. Instead use the
+        /// build_fetch_options macro, which calls this function.
+        fn __insert_into_fetch_option(self, map: &mut HashMap<String, String>, key: String);
+    }
+
+    impl<T: ToString> InsertIntoFetchOption for Option<T> {
+        fn __insert_into_fetch_option(self, map: &mut HashMap<String, String>, key: String) {
+            if let Some(value) = self {
+                map.insert(key, value.to_string());
+            }
+        }
+    }
+
+    impl InsertIntoFetchOption for Vec<String> {
+        fn __insert_into_fetch_option(self, map: &mut HashMap<String, String>, key: String) {
+            if !self.is_empty() {
+                map.insert(key, self.join(","));
+            }
+        }
+    }
+
+    impl InsertIntoFetchOption for bool {
+        fn __insert_into_fetch_option(self, map: &mut HashMap<String, String>, key: String) {
+            if self {
+                map.insert(key, String::from("true"));
+            }
+        }
+    }
+}
+
 /// The response returned by the fetch function.
 pub struct FetchResult<T> {
     /// Whether the items should replace the existing ones

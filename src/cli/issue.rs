@@ -4,15 +4,17 @@ use anyhow::Context;
 use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Input;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::{
+    build_fetch_options,
     cli::{
-        config::{Config, MergableWithConfig},
+        config::Config,
         forge::{self, ApiType, HttpClient, gitea, github, gitlab},
     },
+    forge,
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
+    merge_config_into_args,
     tui::{self, FetchOptions, ListableItem},
 };
 
@@ -112,48 +114,6 @@ pub struct IssueListCommandArgs {
     web: bool,
 }
 
-impl MergableWithConfig for IssueListCommandArgs {
-    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
-        if self.api.is_none() {
-            self.api = config.get_enum("issue/list/api", remote);
-        }
-
-        if self.api_url.is_none() {
-            self.api_url = config.get_string("issue/list/api-url", remote);
-        }
-
-        if !self.auth {
-            self.auth = config
-                .get_bool("issue/list/auth", remote)
-                .unwrap_or_default();
-        }
-
-        if self.fields.is_empty() {
-            self.fields = config
-                .get_enum_vec("issue/list/fields", remote)
-                .unwrap_or_default();
-        };
-
-        if self.format.is_none() {
-            self.format = config.get_enum("issue/list/format", remote);
-        }
-
-        if self.per_page.is_none() {
-            self.per_page = config.get_u32("issue/list/per-page", remote);
-        }
-
-        if self.state.is_none() {
-            self.state = config.get_enum("issue/list/state", remote);
-        }
-
-        if !self.interactive {
-            self.interactive = config
-                .get_bool("issue/list/interactive", remote)
-                .unwrap_or_default();
-        }
-    }
-}
-
 /// Command-line arguments for creating an issue.
 #[derive(Args)]
 pub struct IssueCreateCommandArgs {
@@ -189,36 +149,6 @@ pub struct IssueCreateCommandArgs {
     /// Create an issue in the web browser
     #[arg(short, long)]
     web: bool,
-}
-
-impl MergableWithConfig for IssueCreateCommandArgs {
-    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
-        if self.api.is_none() {
-            self.api = config.get_enum("issue/create/api", remote);
-        }
-
-        if self.api_url.is_none() {
-            self.api_url = config.get_string("issue/create/api-url", remote);
-        }
-
-        if !self.editor {
-            self.editor = config
-                .get_bool("issue/create/editor", remote)
-                .unwrap_or_default();
-        }
-
-        if !self.no_browser {
-            self.no_browser = config
-                .get_bool("issue/create/no-browser", remote)
-                .unwrap_or_default();
-        }
-
-        if !self.web {
-            self.web = config
-                .get_bool("issue/create/web", remote)
-                .unwrap_or_default();
-        }
-    }
 }
 
 // =============================================================================
@@ -312,7 +242,22 @@ pub fn list_issues(mut args: IssueListCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
 
-    args.merge_with_config(&config, Some(&remote));
+    merge_config_into_args!(
+        &config,
+        args,
+        Some(&remote),
+        "issue/list",
+        [
+            api,
+            api_url,
+            auth,
+            fields,
+            format,
+            per_page,
+            state,
+            interactive
+        ]
+    );
 
     let api_type = match args.api {
         Some(api_type) => api_type,
@@ -356,7 +301,13 @@ pub fn create_issue(mut args: IssueCreateCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
 
-    args.merge_with_config(&config, Some(&remote));
+    merge_config_into_args!(
+        &config,
+        args,
+        Some(&remote),
+        "issue/create",
+        [api, api_url, editor, no_browser, web]
+    );
 
     let api_type = match args.api {
         Some(api_type) => api_type,
@@ -404,11 +355,7 @@ pub fn create_issue(mut args: IssueCreateCommandArgs) -> anyhow::Result<()> {
 // =============================================================================
 
 fn list_issues_in_web_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
-    let get_issues_url = match api_type {
-        ApiType::GitHub => github::get_url_for_issues,
-        ApiType::GitLab => gitlab::get_url_for_issues,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_issues,
-    };
+    let get_issues_url = forge!(api_type, get_url_for_issues);
 
     open::that(get_issues_url(remote))?;
 
@@ -424,11 +371,7 @@ fn list_issues_to_stdout(
     output_format: &OutputFormat,
     use_auth: bool,
 ) -> anyhow::Result<()> {
-    let get_issues = match api_type {
-        ApiType::GitHub => github::get_issues,
-        ApiType::GitLab => gitlab::get_issues,
-        ApiType::Gitea | ApiType::Forgejo => gitea::get_issues,
-    };
+    let get_issues = forge!(api_type, get_issues);
     let response = get_issues(&HttpClient::new(), remote, api_url, filters, use_auth)
         .context("Failed fetching issues")?;
 
@@ -450,13 +393,13 @@ fn list_issues_interactively(
     api_type: ApiType,
     args: IssueListCommandArgs,
 ) -> anyhow::Result<()> {
-    let fetch_options = build_fetch_options_for_interactive_selection(
-        args.assignee,
-        args.author,
-        args.labels,
-        args.query,
-        args.state,
-    );
+    let fetch_options = build_fetch_options! {
+        "assignee": args.assignee,
+        "author": args.author,
+        "labels": args.labels,
+        "query": args.query,
+        "state": args.state,
+    };
 
     eprintln!("Loading issues...");
 
@@ -485,38 +428,6 @@ fn list_issues_interactively(
     Ok(())
 }
 
-fn build_fetch_options_for_interactive_selection(
-    assignee: Option<String>,
-    author: Option<String>,
-    labels: Vec<String>,
-    query: Option<String>,
-    state: Option<IssueState>,
-) -> FetchOptions {
-    let mut options_map = HashMap::new();
-
-    if let Some(assignee) = assignee {
-        options_map.insert(String::from("assignee"), assignee);
-    }
-
-    if let Some(author) = author {
-        options_map.insert(String::from("author"), author);
-    }
-
-    if !labels.is_empty() {
-        options_map.insert(String::from("labels"), labels.join(","));
-    }
-
-    if let Some(query) = query {
-        options_map.insert(String::from("query"), query);
-    }
-
-    if let Some(state) = state {
-        options_map.insert(String::from("state"), state.to_string());
-    }
-
-    FetchOptions::new(options_map)
-}
-
 fn select_issue_interactively(
     remote: GitRemoteData,
     api_type: ApiType,
@@ -525,12 +436,7 @@ fn select_issue_interactively(
     per_page: u32,
     use_auth: bool,
 ) -> anyhow::Result<Issue> {
-    let get_issues = match api_type {
-        ApiType::GitHub => github::get_issues,
-        ApiType::GitLab => gitlab::get_issues,
-        ApiType::Gitea | ApiType::Forgejo => gitea::get_issues,
-    };
-
+    let get_issues = forge!(api_type, get_issues);
     let http_client = HttpClient::new();
 
     tui::select_item_with(initial_options, move |page, options, result| {
@@ -563,11 +469,7 @@ fn select_issue_interactively(
 }
 
 fn create_issue_via_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
-    let url = match api_type {
-        ApiType::GitHub => github::get_url_for_issue_creation(remote),
-        ApiType::GitLab => gitlab::get_url_for_issue_creation(remote),
-        ApiType::Gitea | ApiType::Forgejo => gitea::get_url_for_issue_creation(remote),
-    };
+    let url = forge!(api_type, get_url_for_issue_creation)(remote);
 
     open::that(url)?;
 
@@ -610,11 +512,7 @@ fn create_issue_via_api(
     no_browser: bool,
 ) -> anyhow::Result<()> {
     let http_client = HttpClient::new();
-    let create_issue = match api_type {
-        ApiType::GitHub => github::create_issue,
-        ApiType::GitLab => gitlab::create_issue,
-        ApiType::Gitea | ApiType::Forgejo => gitea::create_issue,
-    };
+    let create_issue = forge!(api_type, create_issue);
     let issue = create_issue(&http_client, remote, api_url, create_options)?;
 
     if no_browser {

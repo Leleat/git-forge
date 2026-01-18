@@ -7,10 +7,12 @@ use clap::Args;
 
 use crate::{
     cli::{
-        config::{Config, MergableWithConfig},
+        config::Config,
         forge::{self, ApiType, gitea, github, gitlab},
     },
+    forge,
     git::{self, GitRemoteData},
+    merge_config_into_args,
 };
 
 const DEFAULT_REMOTE: &str = "origin";
@@ -63,20 +65,6 @@ pub struct BrowseCommandArgs {
     releases: bool,
 }
 
-impl MergableWithConfig for BrowseCommandArgs {
-    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
-        if self.api.is_none() {
-            self.api = config.get_enum("browse/api", remote);
-        }
-
-        if !self.no_browser {
-            self.no_browser = config
-                .get_bool("browse/no-browser", remote)
-                .unwrap_or_default();
-        }
-    }
-}
-
 // =============================================================================
 // Command Logic
 // =============================================================================
@@ -93,7 +81,7 @@ pub fn browse_repository(mut args: BrowseCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to get remote URL for remote '{}'", &remote_name))?;
 
-    args.merge_with_config(&config, Some(&remote));
+    merge_config_into_args!(&config, args, Some(&remote), "browse", [api, no_browser]);
 
     let api_type = match args.api {
         Some(api_type) => api_type,
@@ -137,11 +125,7 @@ pub fn browse_repository(mut args: BrowseCommandArgs) -> anyhow::Result<()> {
 }
 
 fn browse_home(remote: &GitRemoteData, api_type: &ApiType, no_browser: bool) -> anyhow::Result<()> {
-    let get_home_url = match api_type {
-        ApiType::GitHub => github::get_url_for_home,
-        ApiType::GitLab => gitlab::get_url_for_home,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_home,
-    };
+    let get_home_url = forge!(api_type, get_url_for_home);
     let url = get_home_url(remote);
 
     print_or_open(&url, no_browser)
@@ -153,11 +137,7 @@ fn browse_commitish(
     commit_ish: &str,
     no_browser: bool,
 ) -> anyhow::Result<()> {
-    let get_commit_url = match api_type {
-        ApiType::GitHub => github::get_url_for_commit,
-        ApiType::GitLab => gitlab::get_url_for_commit,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_commit,
-    };
+    let get_commit_url = forge!(api_type, get_url_for_commit);
     let commit = git::rev_parse(commit_ish)
         .with_context(|| format!("Failed to resolve commit-ish: {commit_ish}"))?;
     let url = get_commit_url(remote, &commit);
@@ -171,11 +151,7 @@ fn browse_issue(
     issue_number: u32,
     no_browser: bool,
 ) -> anyhow::Result<()> {
-    let get_issue_url = match api_type {
-        ApiType::GitHub => github::get_url_for_issue,
-        ApiType::GitLab => gitlab::get_url_for_issue,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_issue,
-    };
+    let get_issue_url = forge!(api_type, get_url_for_issue);
     let url = get_issue_url(remote, issue_number);
 
     print_or_open(&url, no_browser)
@@ -186,11 +162,7 @@ fn browse_issues(
     api_type: &ApiType,
     no_browser: bool,
 ) -> anyhow::Result<()> {
-    let get_issues_url = match api_type {
-        ApiType::GitHub => github::get_url_for_issues,
-        ApiType::GitLab => gitlab::get_url_for_issues,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_issues,
-    };
+    let get_issues_url = forge!(api_type, get_url_for_issues);
     let url = get_issues_url(remote);
 
     print_or_open(&url, no_browser)
@@ -202,22 +174,14 @@ fn browse_pr(
     pr_number: u32,
     no_browser: bool,
 ) -> anyhow::Result<()> {
-    let get_pr_url = match api_type {
-        ApiType::GitHub => github::get_url_for_pr,
-        ApiType::GitLab => gitlab::get_url_for_pr,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_pr,
-    };
+    let get_pr_url = forge!(api_type, get_url_for_pr);
     let url = get_pr_url(remote, pr_number);
 
     print_or_open(&url, no_browser)
 }
 
 fn browse_prs(remote: &GitRemoteData, api_type: &ApiType, no_browser: bool) -> anyhow::Result<()> {
-    let get_prs_url = match api_type {
-        ApiType::GitHub => github::get_url_for_prs,
-        ApiType::GitLab => gitlab::get_url_for_prs,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_prs,
-    };
+    let get_prs_url = forge!(api_type, get_url_for_prs);
     let url = get_prs_url(remote);
 
     print_or_open(&url, no_browser)
@@ -228,11 +192,7 @@ fn browse_releases(
     api_type: &ApiType,
     no_browser: bool,
 ) -> anyhow::Result<()> {
-    let get_releases_url = match api_type {
-        ApiType::GitHub => github::get_url_for_releases,
-        ApiType::GitLab => gitlab::get_url_for_releases,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_releases,
-    };
+    let get_releases_url = forge!(api_type, get_url_for_releases);
     let url = get_releases_url(remote);
 
     print_or_open(&url, no_browser)
@@ -262,11 +222,7 @@ fn browse_path(
         .strip_prefix(git::get_absolute_repo_root()?)
         .context("The specified file is not within the current git repository")?;
     let file_path = path_with_forward_slashes(file_path);
-    let get_path_url = match api_type {
-        ApiType::GitHub => github::get_url_for_path,
-        ApiType::GitLab => gitlab::get_url_for_path,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_path,
-    };
+    let get_path_url = forge!(api_type, get_url_for_path);
     let commit = match commit_ish {
         Some(c) => {
             &git::rev_parse(c).with_context(|| format!("Failed to resolve commit-ish: {c}"))?
