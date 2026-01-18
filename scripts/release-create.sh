@@ -44,7 +44,7 @@ assert_on_main_branch() {
 
 pull_latest_changes() {
     log_info "Pulling latest changes from main..."
-    git pull origin main
+    git pull --quiet origin main
 }
 
 assert_last_commit_updated_release_files() {
@@ -130,6 +130,8 @@ main() {
     pull_latest_changes
     assert_last_commit_updated_release_files
 
+    VERSION=$(get_version_from_cargo_toml)
+
     log_info "Version: $VERSION"
 
     TAG_MESSAGE=$(create_tag_message "$VERSION")
@@ -141,6 +143,6 @@ main() {
 
 CARGO_TOML="Cargo.toml"
 REPO_URL=$(grep '^repository = ' "$CARGO_TOML" | sed 's/repository = "\(.*\)"/\1/')
-VERSION=$(get_version_from_cargo_toml)
+VERSION=""
 
 main "$@"
