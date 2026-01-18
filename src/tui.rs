@@ -123,14 +123,13 @@ impl FetchOptions {
 ///     "draft": args.draft,
 ///};
 /// ```
-#[macro_export]
 macro_rules! build_fetch_options {
     ($($key:literal: $field:expr),* $(,)?) => {
         {
             let mut options_map = std::collections::HashMap::new();
 
             $(
-                $crate::tui::__macro_internals::InsertIntoFetchOption::__insert_into_fetch_option(
+                $crate::tui::macro_internals::InsertIntoFetchOption::__insert_into_fetch_option(
                     $field,
                     &mut options_map,
                     String::from($key)
@@ -142,11 +141,12 @@ macro_rules! build_fetch_options {
     };
 }
 
+pub(crate) use build_fetch_options;
+
 /// Internal module for macro implementation details.
 ///
 /// This module is public only for macro access but hidden from documentation.
-#[doc(hidden)]
-pub mod __macro_internals {
+pub(crate) mod macro_internals {
     use std::collections::HashMap;
 
     pub trait InsertIntoFetchOption {

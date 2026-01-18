@@ -33,12 +33,11 @@ pub fn guess_api_type_from_host(host: &str) -> anyhow::Result<ApiType> {
 ///
 /// ```rust,ignore
 /// let api_type = ApiType::GitHub;
-/// let get_issues = forge!(api_type, get_issues);
+/// let get_issues = forge::function!(api_type, get_issues);
 ///
 /// assert_eq!(get_issues, crate::cli::forge::github::get_issues);
 /// ```
-#[macro_export]
-macro_rules! forge {
+macro_rules! function {
     ($type:expr, $fn_name:ident) => {
         match $type {
             ApiType::GitHub => github::$fn_name,
@@ -47,6 +46,8 @@ macro_rules! forge {
         }
     };
 }
+
+pub(crate) use function;
 
 #[cfg(test)]
 mod tests {
