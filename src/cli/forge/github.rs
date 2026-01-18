@@ -1,9 +1,11 @@
 use anyhow::Context;
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::{
     cli::{
-        forge::http_client::{HttpClient, PaginatedResponse, WithAuth, WithHttpStatusOk},
+        forge::http_client::{
+            self, HttpClient, IntoPaginatedResponse, PaginatedResponse, WithAuth, WithHttpStatusOk,
+        },
         issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
@@ -17,6 +19,22 @@ const AUTH_SCHEME: &str = "Bearer";
 // Domain Types
 // =============================================================================
 
+/// GitHub Search API response
+/// https://docs.github.com/en/rest/search/search?apiVersion=2022-11-28#search-issues-and-pull-requests
+#[derive(Debug, Deserialize)]
+struct GitHubSearchResponse<T> {
+    items: Vec<T>,
+}
+
+impl<S, T: From<S>> IntoPaginatedResponse<T> for GitHubSearchResponse<S> {
+    fn into_paginated_response(self, has_next_page: bool) -> PaginatedResponse<T> {
+        PaginatedResponse::new(
+            self.items.into_iter().map(Into::into).collect(),
+            has_next_page,
+        )
+    }
+}
+
 /// GitHub API response for issues.
 /// https://docs.github.com/en/rest/issues/issues
 #[derive(Debug, Deserialize)]
@@ -27,7 +45,6 @@ struct GitHubIssue {
     labels: Vec<GitHubLabel>,
     user: GitHubUser,
     html_url: String,
-    pull_request: Option<GitHubIssuePrField>,
 }
 
 impl From<GitHubIssue> for Issue {
@@ -53,9 +70,6 @@ struct GitHubUser {
     login: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct GitHubIssuePrField {}
-
 /// GitHub API response for pull requests.
 /// https://docs.github.com/en/rest/pulls/pulls
 #[derive(Debug, Deserialize)]
@@ -68,8 +82,6 @@ struct GitHubPullRequest {
     created_at: String,
     updated_at: String,
     html_url: String,
-    head: GitHubPrRef,
-    base: GitHubPrRef,
     draft: Option<bool>,
     merged_at: Option<String>,
 }
@@ -89,17 +101,9 @@ impl From<GitHubPullRequest> for Pr {
             labels: pr.labels.into_iter().map(|l| l.name).collect(),
             created_at: pr.created_at,
             updated_at: pr.updated_at,
-            source_branch: pr.head.ref_name,
-            target_branch: pr.base.ref_name,
             draft: pr.draft.unwrap_or(false),
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct GitHubPrRef {
-    #[serde(rename = "ref")]
-    ref_name: String,
 }
 
 // =============================================================================
@@ -117,39 +121,17 @@ pub fn get_issues(
         Some(url) => url,
         None => &build_api_base_url(remote),
     };
-    let repo_path = &remote.path;
-    let url = format!("{base_url}/repos/{repo_path}/issues");
-    let mut request = http_client
-        .get(&url)
-        .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
-        .header("Accept", "application/vnd.github+json")
-        .query(&[("state", filters.state)])
-        .query(&[("page", filters.page)])
-        .query(&[("per_page", filters.per_page)]);
+    let url = format!("{base_url}/search/issues");
+    let query_string = build_issue_search_query(&remote.path, filters);
 
-    if let Some(assignee) = filters.assignee {
-        request = request.query(&[("assignee", assignee)]);
-    }
-
-    if let Some(author) = filters.author {
-        request = request.query(&[("creator", author)]);
-    }
-
-    if !filters.labels.is_empty() {
-        request = request.query(&[("labels", filters.labels.join(","))]);
-    }
-
-    request
-        .send()
-        .context("Failed to fetch issues from Gitea/Forgejo API")?
-        .with_http_status_ok()?
-        .try_into()
-        .map(|response: PaginatedResponse<GitHubIssue>| {
-            response.filter_map(|i| match i.pull_request {
-                Some(_) => None,
-                None => Some(i.into()),
-            })
-        })
+    find_items_with_search_api::<GitHubIssue, Issue>(
+        http_client,
+        &url,
+        &query_string,
+        filters.page,
+        filters.per_page,
+        use_auth,
+    )
 }
 
 pub fn create_issue(
@@ -197,50 +179,17 @@ pub fn get_prs(
         Some(url) => url,
         None => &build_api_base_url(remote),
     };
-    let repo_path = &remote.path;
-    let url = format!("{base_url}/repos/{repo_path}/pulls");
-    let request = http_client
-        .get(&url)
-        .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
-        .header("Accept", "application/vnd.github.v3+json")
-        .query(&[("state", filters.state)])
-        .query(&[("page", filters.page)])
-        .query(&[("per_page", filters.per_page)]);
+    let url = format!("{base_url}/search/issues");
+    let query_string = build_pr_search_query(&remote.path, filters);
 
-    request
-        .send()
-        .context("Network request failed while fetching pull requests from GitHub")?
-        .with_http_status_ok()?
-        .try_into()
-        .map(|response: PaginatedResponse<GitHubPullRequest>| {
-            // Client-side filtering
-            response.filter_map(|pr| {
-                let state_matches = match filters.state {
-                    PrState::Merged => pr.merged_at.is_some(),
-                    PrState::Closed => pr.merged_at.is_none(),
-                    _ => true,
-                };
-
-                let author_matches = filters
-                    .author
-                    .map(|author_name| pr.user.login == author_name)
-                    .unwrap_or(true);
-
-                let labels_match = filters.labels.is_empty()
-                    || filters
-                        .labels
-                        .iter()
-                        .all(|label| pr.labels.iter().any(|l| &l.name == label));
-
-                let draft_matches = !filters.draft || pr.draft.unwrap_or(false);
-
-                if state_matches && author_matches && labels_match && draft_matches {
-                    Some(pr.into())
-                } else {
-                    None
-                }
-            })
-        })
+    find_items_with_search_api::<GitHubPullRequest, Pr>(
+        http_client,
+        &url,
+        &query_string,
+        filters.page,
+        filters.per_page,
+        use_auth,
+    )
 }
 
 pub fn create_pr(
@@ -357,4 +306,99 @@ fn build_web_base_url(remote: &GitRemoteData) -> String {
         Some(port) => format!("https://{host}:{port}/{path}"),
         None => format!("https://{host}/{path}"),
     }
+}
+
+/// https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests
+fn build_issue_search_query(repo_path: &str, filters: &ListIssueFilters) -> String {
+    let mut query_string = match filters.query {
+        Some(query) => format!("{query} in:title in:body repo:{repo_path} is:issue"),
+        None => format!("repo:{repo_path} is:issue"),
+    };
+
+    match filters.state {
+        IssueState::Open => query_string.push_str(" is:open"),
+        IssueState::Closed => query_string.push_str(" is:closed"),
+        IssueState::All => {}
+    }
+
+    if let Some(assignee) = filters.assignee {
+        query_string.push_str(" assignee:");
+        query_string.push_str(assignee);
+    }
+
+    if let Some(author) = filters.author {
+        query_string.push_str(" author:");
+        query_string.push_str(author);
+    }
+
+    for label in filters.labels {
+        query_string.push_str(" label:");
+        query_string.push_str(label);
+    }
+
+    query_string
+}
+
+/// https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests
+fn build_pr_search_query(repo_path: &str, filters: &ListPrsFilters) -> String {
+    let mut query_string = match filters.query {
+        Some(query) => format!("{query} in:title in:body repo:{repo_path} is:pr"),
+        None => format!("repo:{repo_path} is:pr"),
+    };
+
+    match filters.state {
+        PrState::Open => query_string.push_str(" is:open"),
+        PrState::Closed => query_string.push_str(" is:closed is:unmerged"),
+        PrState::Merged => query_string.push_str(" is:merged"),
+        PrState::All => {}
+    }
+
+    if let Some(author) = filters.author {
+        query_string.push_str(" author:");
+        query_string.push_str(author);
+    }
+
+    for label in filters.labels {
+        query_string.push_str(" label:");
+        query_string.push_str(label);
+    }
+
+    if filters.draft {
+        query_string.push_str(" draft:true");
+    }
+
+    query_string
+}
+
+fn find_items_with_search_api<T, U>(
+    http_client: &HttpClient,
+    url: &str,
+    query_string: &str,
+    page: u32,
+    per_page: u32,
+    use_auth: bool,
+) -> anyhow::Result<PaginatedResponse<U>>
+where
+    T: DeserializeOwned,
+    U: From<T>,
+{
+    let request = http_client
+        .get(url)
+        .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
+        .header("Accept", "application/vnd.github+json")
+        .query(&[("q", query_string)])
+        .query(&[("page", page)])
+        .query(&[("per_page", per_page)]);
+
+    let response = request
+        .send()
+        .context("Failed to fetch items from GitHub Search API")?
+        .with_http_status_ok()?;
+
+    let has_next_page = http_client::has_next_link_header(&response);
+
+    response
+        .json()
+        .context("Failed to parse GitHub Search API response")
+        .map(|res: GitHubSearchResponse<T>| res.into_paginated_response(has_next_page))
 }

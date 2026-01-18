@@ -11,7 +11,11 @@ use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Editor;
 use serde::{Deserialize, Serialize};
 
-use crate::git::{self, GitRemoteData};
+use crate::{
+    cli::{forge::ApiType, issue::IssueState, pr::PrState},
+    git::{self, GitRemoteData},
+    io::OutputFormat,
+};
 
 const APP_NAME: &str = std::env!("CARGO_PKG_NAME");
 const CONFIG_NAME: &str = "config";
@@ -396,16 +400,142 @@ impl<'a> ConfigSource<'a> {
     }
 }
 
-/// Trait for command argument structs that support configurability.
+/// Merges config values into args fields.
 ///
-/// Note: the `remote` arg must be resolved BEFORE calling `merge_with_config()`
-/// because the remote data determines which config scope (global/host/remote)
-/// to use for merging. This creates a dependency: you need the remote to know
-/// which config to merge, so `remote` cannot itself be merged via this trait.
-pub trait MergableWithConfig {
-    /// Merges config values with the args struct. CLI values always take
-    /// precedence over config values.
-    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>);
+/// It expects the following arguments (tt):
+///   `config`, `args`, optional git `remote`,  base `config path`, `arg fields`
+///   in square brackets
+///
+/// This macro automatically converts field names from `snake_case` to
+/// `kebab-case` for the config path.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// pub fn list_issues(mut args: IssueListCommandArgs) -> anyhow::Result<()> {
+///     let (config, remote) = (Config::load_from_disk()?, git::get_remote_data("origin")?);
+///
+///     merge_config_into_args!(
+///         &config,
+///         args,
+///         Some(&remote),
+///         "issue/list",
+///         [api, api_url, auth, fields, format, per_page, state, interactive]
+///     );
+/// }
+/// ```
+#[macro_export]
+macro_rules! merge_config_into_args {
+    ($config:expr, $args:expr, $remote:expr, $command_path:literal, [$($field:ident),* $(,)?]$(,)?) => {
+        $(
+            {
+                let field_name = stringify!($field).replace('_', "-");
+                let config_path = format!("{}/{}", $command_path, field_name);
+
+                $crate::cli::config::__macro_internals::MergeConfigIntoArg::__merge_with_config(
+                    &mut $args.$field,
+                    $config,
+                    &config_path,
+                    $remote,
+                );
+            }
+        )*
+    };
+}
+
+/// Internal module for macro implementation details.
+///
+/// This module is public only for macro access but hidden from documentation.
+#[doc(hidden)]
+pub mod __macro_internals {
+    use super::{ApiType, Config, GitRemoteData, IssueState, OutputFormat, PrState};
+    use clap::ValueEnum;
+
+    pub trait MergeConfigIntoArg {
+        /// Helper function for merging config values into args fields. It isn't
+        /// meant to be called manually. Instead use the merge_config_into_args
+        /// macro, which calls this function.
+        fn __merge_with_config(
+            &mut self,
+            config: &Config,
+            path: &str,
+            remote: Option<&GitRemoteData>,
+        );
+    }
+
+    impl MergeConfigIntoArg for Option<String> {
+        fn __merge_with_config(
+            &mut self,
+            config: &Config,
+            path: &str,
+            remote: Option<&GitRemoteData>,
+        ) {
+            if self.is_none() {
+                *self = config.get_string(path, remote);
+            }
+        }
+    }
+
+    impl MergeConfigIntoArg for Option<u32> {
+        fn __merge_with_config(
+            &mut self,
+            config: &Config,
+            path: &str,
+            remote: Option<&GitRemoteData>,
+        ) {
+            if self.is_none() {
+                *self = config.get_u32(path, remote);
+            }
+        }
+    }
+
+    impl MergeConfigIntoArg for bool {
+        fn __merge_with_config(
+            &mut self,
+            config: &Config,
+            path: &str,
+            remote: Option<&GitRemoteData>,
+        ) {
+            if !*self {
+                *self = config.get_bool(path, remote).unwrap_or_default();
+            }
+        }
+    }
+
+    impl<T: ValueEnum> MergeConfigIntoArg for Vec<T> {
+        fn __merge_with_config(
+            &mut self,
+            config: &Config,
+            path: &str,
+            remote: Option<&GitRemoteData>,
+        ) {
+            if self.is_empty() {
+                *self = config.get_enum_vec(path, remote).unwrap_or_default();
+            }
+        }
+    }
+
+    macro_rules! impl_merge_from_config_for_enum {
+        ($enum_type:ty) => {
+            impl MergeConfigIntoArg for Option<$enum_type> {
+                fn __merge_with_config(
+                    &mut self,
+                    config: &Config,
+                    path: &str,
+                    remote: Option<&GitRemoteData>,
+                ) {
+                    if self.is_none() {
+                        *self = config.get_enum(path, remote);
+                    }
+                }
+            }
+        };
+    }
+
+    impl_merge_from_config_for_enum!(ApiType);
+    impl_merge_from_config_for_enum!(OutputFormat);
+    impl_merge_from_config_for_enum!(IssueState);
+    impl_merge_from_config_for_enum!(PrState);
 }
 
 // =============================================================================

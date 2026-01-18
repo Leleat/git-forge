@@ -11,7 +11,7 @@ A simple CLI tool for basic interactions with issues and pull requests across Gi
 git forge [<subcommand>] [<options>]
 ```
 
-Note that due to differing forge APIs, some behavior may vary across forges. E.g. filtering of PRs may happen client-side for some forges, while it happens server-side for others.
+Note that git-forge tries to be forge-agnostic and abstract the forge-specific details away. This is the reason why git-forge only supports common features (e.g. issues, PRs). But even with just the common features, forges and their APIs may vary (slightly) in their capability. In case a forge doesn't support a specific feature, git-forge will error and tell you that the feature you are trying to use isn't supported by that specific forge. This however shouldn't be a problem in general. As of now, the only differences between forges is: Gitea/Forgejo doesn't support filtering PRs by `draft` or `merged` status.
 
 ### Subcommands
 
@@ -79,7 +79,6 @@ Commands:
   list      List pull requests
 ```
 
-
 ### Shell Completions
 
 You can generate shell completions for `bash`, `zsh`, `fish`, `powershell`, and `elvish` using:
@@ -90,7 +89,7 @@ git forge completions <shell>
 
 You can save the completion script somewhere and source it in your shell configuration.
 
-**But** there is a limitation. The generated completions work for `git-forge` but may not work for `git forge` (note the lack of the hyphen between `git` and `forge`)  without modification.
+**But** there is a limitation. The generated completions work for `git-forge` but may not work for `git forge` (note the lack of the hyphen between `git` and `forge`) without modification.
 
 `git forge` uses git's completion. Here you can read about [git's completion setup](https://git-scm.com/book/en/v2/Appendix-A%3A-Git-in-Other-Environments-Git-in-Bash). The generated git-forge completion doesn't integrate well with git's completion since it relies on certain arguments and variables. So you may need to do some manual wiring.
 

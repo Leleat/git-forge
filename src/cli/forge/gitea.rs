@@ -3,7 +3,9 @@ use serde::Deserialize;
 
 use crate::{
     cli::{
-        forge::http_client::{HttpClient, PaginatedResponse, WithAuth, WithHttpStatusOk},
+        forge::http_client::{
+            self, HttpClient, IntoPaginatedResponse, PaginatedResponse, WithAuth, WithHttpStatusOk,
+        },
         issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
@@ -28,6 +30,8 @@ struct GiteaIssue {
     user: GiteaUser,
     html_url: String,
     pull_request: Option<GiteaIssuePrField>,
+    created_at: String,
+    updated_at: String,
 }
 
 impl From<GiteaIssue> for Issue {
@@ -43,6 +47,36 @@ impl From<GiteaIssue> for Issue {
     }
 }
 
+impl From<GiteaIssue> for Pr {
+    fn from(issue: GiteaIssue) -> Self {
+        let (draft, merged) = issue
+            .pull_request
+            .map(|pr| (pr.draft, pr.merged))
+            .unwrap_or_default();
+
+        Pr {
+            id: issue.number,
+            title: issue.title,
+            state: match issue.state {
+                IssueState::Closed => {
+                    if merged {
+                        String::from("merged")
+                    } else {
+                        String::from("closed")
+                    }
+                }
+                _ => String::from("open"),
+            },
+            author: issue.user.login,
+            url: issue.html_url,
+            labels: issue.labels.into_iter().map(|l| l.name).collect(),
+            created_at: issue.created_at,
+            updated_at: issue.updated_at,
+            draft,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct GiteaLabel {
     name: String,
@@ -54,7 +88,10 @@ struct GiteaUser {
 }
 
 #[derive(Debug, Deserialize)]
-struct GiteaIssuePrField {}
+struct GiteaIssuePrField {
+    draft: bool,
+    merged: bool,
+}
 
 /// Gitea/Forgejo API response for pull requests.
 /// https://docs.gitea.com/api/#tag/repository/operation/repoNewPinAllowed
@@ -68,8 +105,6 @@ struct GiteaPullRequest {
     created_at: String,
     updated_at: String,
     html_url: String,
-    head: GiteaPrRef,
-    base: GiteaPrRef,
     draft: bool,
     merged: bool,
 }
@@ -89,17 +124,9 @@ impl From<GiteaPullRequest> for Pr {
             labels: pr.labels.into_iter().map(|l| l.name).collect(),
             created_at: pr.created_at,
             updated_at: pr.updated_at,
-            source_branch: pr.head.ref_name,
-            target_branch: pr.base.ref_name,
             draft: pr.draft,
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct GiteaPrRef {
-    #[serde(rename = "ref")]
-    ref_name: String,
 }
 
 // =============================================================================
@@ -119,6 +146,7 @@ pub fn get_issues(
     };
     let repo_path = &remote.path;
     let endpoint_url = format!("{base_url}/repos/{repo_path}/issues");
+
     let mut request = http_client
         .get(&endpoint_url)
         .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
@@ -139,17 +167,21 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    request
+    if let Some(query) = filters.query {
+        request = request.query(&[("q", query)]);
+    }
+
+    let response = request
         .send()
-        .context("Network request failed while fetching issues from Gitea/Forgejo")?
-        .with_http_status_ok()?
-        .try_into()
-        .map(|response: PaginatedResponse<GiteaIssue>| {
-            response.filter_map(|i| match i.pull_request {
-                Some(_) => None,
-                None => Some(i.into()),
-            })
-        })
+        .context("Failed to fetch items from Gitea Search API")?
+        .with_http_status_ok()?;
+
+    let has_next_page = http_client::has_next_link_header(&response);
+
+    response
+        .json()
+        .context("Failed to parse Gitea Search API response")
+        .map(|res: Vec<GiteaIssue>| res.into_paginated_response(has_next_page))
 }
 
 pub fn create_issue(
@@ -192,52 +224,60 @@ pub fn get_prs(
     filters: &ListPrsFilters,
     use_auth: bool,
 ) -> anyhow::Result<PaginatedResponse<Pr>> {
+    // Check for unsupported filters
+    if filters.draft {
+        anyhow::bail!("Gitea/Forgejo does not support filtering by draft status");
+    }
+
+    if matches!(filters.state, PrState::Merged) {
+        anyhow::bail!(
+            "Gitea/Forgejo does not support filtering by merged state. Use --state=closed to see both closed and merged PRs"
+        );
+    }
+
     let base_url = match api_url {
         Some(url) => url,
         None => &build_api_base_url(remote),
     };
     let repo_path = &remote.path;
-    let url = format!("{base_url}/repos/{repo_path}/pulls");
-    let request = http_client
+    let url = format!("{base_url}/repos/{repo_path}/issues");
+
+    let mut request = http_client
         .get(&url)
         .with_auth(use_auth, AUTH_TOKEN, AUTH_SCHEME)?
+        .query(&[("type", "pulls")])
         .query(&[("state", filters.state)])
         .query(&[("page", filters.page)])
         .query(&[("limit", filters.per_page)]);
 
-    request
+    if let Some(author) = filters.author {
+        request = request.query(&[("created_by", author)]);
+    }
+
+    if !filters.labels.is_empty() {
+        request = request.query(&[("labels", filters.labels.join(","))]);
+    }
+
+    if let Some(query) = filters.query {
+        request = request.query(&[("q", query)]);
+    }
+
+    let response = request
         .send()
         .context("Network request failed while fetching pull requests from Gitea/Forgejo")?
-        .with_http_status_ok()?
-        .try_into()
-        .map(|response: PaginatedResponse<GiteaPullRequest>| {
-            // Client-side filtering
-            response.filter_map(|pr| {
-                let state_matches = match filters.state {
-                    PrState::Merged => pr.merged,
-                    PrState::Closed => !pr.merged,
-                    _ => true,
-                };
+        .with_http_status_ok()?;
 
-                let author_matches = filters
-                    .author
-                    .map(|author_name| pr.user.login == author_name)
-                    .unwrap_or(true);
+    let has_next_page = http_client::has_next_link_header(&response);
 
-                let labels_match = filters.labels.is_empty()
-                    || filters
-                        .labels
-                        .iter()
-                        .all(|label| pr.labels.iter().any(|l| &l.name == label));
-
-                let draft_matches = !filters.draft || pr.draft;
-
-                if state_matches && author_matches && labels_match && draft_matches {
-                    Some(pr.into())
-                } else {
-                    None
-                }
-            })
+    response
+        .json()
+        .context("Failed to parse API response")
+        .map(|items: Vec<GiteaIssue>| {
+            items
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<Pr>>()
+                .into_paginated_response(has_next_page)
         })
 }
 

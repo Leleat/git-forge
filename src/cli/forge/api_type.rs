@@ -27,6 +27,27 @@ pub fn guess_api_type_from_host(host: &str) -> anyhow::Result<ApiType> {
     )
 }
 
+/// Gets a forge-specific function
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let api_type = ApiType::GitHub;
+/// let get_issues = forge!(api_type, get_issues);
+///
+/// assert_eq!(get_issues, crate::cli::forge::github::get_issues);
+/// ```
+#[macro_export]
+macro_rules! forge {
+    ($type:expr, $fn_name:ident) => {
+        match $type {
+            ApiType::GitHub => github::$fn_name,
+            ApiType::GitLab => gitlab::$fn_name,
+            ApiType::Gitea | ApiType::Forgejo => gitea::$fn_name,
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

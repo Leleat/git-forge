@@ -347,4 +347,56 @@ describe.each([
         expect(rows[0]).toHaveProperty("title");
         expect(rows[0]).toHaveProperty("author");
     });
+
+    it("Should filter issues by query (Fix)", () => {
+        const result = runGitForge({
+            args: [
+                "issue",
+                "list",
+                "--api",
+                forge,
+                "--api-url",
+                getApiUrl(forge),
+                "--query",
+                "Fix",
+                "--state",
+                "all",
+                "--fields",
+                "id,title,url",
+            ],
+            cwd: tempDir,
+        });
+
+        expect(result.exitCode).toBe(0);
+        expectTsvFormat(result.stdout);
+
+        const rows = parseTSV(result.stdout);
+
+        expect(rows).toHaveLength(2);
+
+        rows.forEach((row) => {
+            expect(row.title).toContain("Fix");
+        });
+    });
+
+    it("Should return no results for query with no matches", () => {
+        const result = runGitForge({
+            args: [
+                "issue",
+                "list",
+                "--api",
+                forge,
+                "--api-url",
+                getApiUrl(forge),
+                "--query",
+                "nonexistentterm",
+                "--fields",
+                "id,title,url",
+            ],
+            cwd: tempDir,
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(parseTSV(result.stdout)).toHaveLength(0);
+    });
 });

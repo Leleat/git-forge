@@ -4,15 +4,17 @@ use anyhow::Context;
 use clap::{Args, Subcommand, ValueEnum};
 use dialoguer::Input;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::{
+    build_fetch_options,
     cli::{
-        config::{Config, MergableWithConfig},
+        config::Config,
         forge::{self, ApiType, HttpClient, gitea, github, gitlab},
     },
+    forge,
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
+    merge_config_into_args,
     tui::{self, FetchOptions, ListableItem},
 };
 
@@ -83,6 +85,10 @@ pub struct PrCheckoutCommandArgs {
     #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
     per_page: Option<u32>,
 
+    /// Search keywords
+    #[arg(short, long)]
+    query: Option<String>,
+
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
@@ -90,42 +96,6 @@ pub struct PrCheckoutCommandArgs {
     /// Filter by state for interactive selection
     #[arg(long)]
     state: Option<PrState>,
-}
-
-impl MergableWithConfig for PrCheckoutCommandArgs {
-    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
-        if self.api.is_none() {
-            self.api = config.get_enum("pr/checkout/api", remote);
-        }
-
-        if self.api_url.is_none() {
-            self.api_url = config.get_string("pr/checkout/api-url", remote);
-        }
-
-        if !self.auth {
-            self.auth = config
-                .get_bool("pr/checkout/auth", remote)
-                .unwrap_or_default();
-        }
-
-        if self.author.is_none() {
-            self.author = config.get_string("pr/checkout/author", remote);
-        }
-
-        if !self.draft {
-            self.draft = config
-                .get_bool("pr/checkout/draft", remote)
-                .unwrap_or_default();
-        }
-
-        if self.per_page.is_none() {
-            self.per_page = config.get_u32("pr/checkout/per-page", remote);
-        }
-
-        if self.state.is_none() {
-            self.state = config.get_enum("pr/checkout/state", remote);
-        }
-    }
 }
 
 /// Command-line arguments for creating a new pull request.
@@ -187,64 +157,6 @@ pub struct PrCreateCommandArgs {
     title: Option<String>,
 }
 
-impl MergableWithConfig for PrCreateCommandArgs {
-    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
-        if self.api.is_none() {
-            self.api = config.get_enum("pr/create/api", remote);
-        }
-
-        if self.api_url.is_none() {
-            self.api_url = config.get_string("pr/create/api-url", remote);
-        }
-
-        if !self.draft {
-            self.draft = config
-                .get_bool("pr/create/draft", remote)
-                .unwrap_or_default();
-        }
-
-        if !self.editor {
-            self.editor = config
-                .get_bool("pr/create/editor", remote)
-                .unwrap_or_default();
-        }
-
-        if !self.fill {
-            self.fill = config
-                .get_bool("pr/create/fill", remote)
-                .unwrap_or_default();
-        }
-
-        if !self.fill_first {
-            self.fill_first = config
-                .get_bool("pr/create/fill-first", remote)
-                .unwrap_or_default();
-        }
-
-        if !self.fill_verbose {
-            self.fill_verbose = config
-                .get_bool("pr/create/fill-verbose", remote)
-                .unwrap_or_default();
-        }
-
-        if !self.no_browser {
-            self.no_browser = config
-                .get_bool("pr/create/no-browser", remote)
-                .unwrap_or_default();
-        }
-
-        if !self.no_push {
-            self.no_push = config
-                .get_bool("pr/create/no-push", remote)
-                .unwrap_or_default();
-        }
-
-        if self.target.is_none() {
-            self.target = config.get_string("pr/create/target", remote);
-        }
-    }
-}
-
 /// Command-line arguments for listing pull requests.
 #[derive(Args, Clone)]
 pub struct PrListCommandArgs {
@@ -299,6 +211,10 @@ pub struct PrListCommandArgs {
     #[arg(long, short_alias = 'l', alias = "limit", value_name = "NUMBER")]
     per_page: Option<u32>,
 
+    /// Search keywords
+    #[arg(short, long)]
+    query: Option<String>,
+
     /// Git remote to use
     #[arg(long)]
     remote: Option<String>,
@@ -310,50 +226,6 @@ pub struct PrListCommandArgs {
     /// Open the prs page in the web browser
     #[arg(short, long)]
     web: bool,
-}
-
-impl MergableWithConfig for PrListCommandArgs {
-    fn merge_with_config(&mut self, config: &Config, remote: Option<&GitRemoteData>) {
-        if self.api.is_none() {
-            self.api = config.get_enum("pr/list/api", remote);
-        }
-
-        if self.api_url.is_none() {
-            self.api_url = config.get_string("pr/list/api-url", remote);
-        }
-
-        if !self.auth {
-            self.auth = config.get_bool("pr/list/auth", remote).unwrap_or_default();
-        }
-
-        if !self.draft {
-            self.draft = config.get_bool("pr/list/draft", remote).unwrap_or_default();
-        }
-
-        if self.fields.is_empty() {
-            self.fields = config
-                .get_enum_vec("pr/list/fields", remote)
-                .unwrap_or_default();
-        }
-
-        if self.format.is_none() {
-            self.format = config.get_enum("pr/list/format", remote);
-        }
-
-        if !self.interactive {
-            self.interactive = config
-                .get_bool("pr/list/interactive", remote)
-                .unwrap_or_default();
-        }
-
-        if self.per_page.is_none() {
-            self.per_page = config.get_u32("pr/list/per-page", remote);
-        }
-
-        if self.state.is_none() {
-            self.state = config.get_enum("pr/list/state", remote);
-        }
-    }
 }
 
 // =============================================================================
@@ -420,10 +292,6 @@ pub struct Pr {
     pub created_at: String,
     /// Timestamp when the pull request was last updated.
     pub updated_at: String,
-    /// The source branch (head) of the pull request.
-    pub source_branch: String,
-    /// The target branch (base) of the pull request.
-    pub target_branch: String,
     /// Whether the pull request is a draft.
     pub draft: bool,
 }
@@ -439,6 +307,7 @@ pub struct ListPrsFilters<'a> {
     pub labels: &'a [String],
     pub page: u32,
     pub per_page: u32,
+    pub query: Option<&'a str>,
     pub state: &'a PrState,
     pub draft: bool,
 }
@@ -467,7 +336,23 @@ pub fn list_prs(mut args: PrListCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
 
-    args.merge_with_config(&config, Some(&remote));
+    merge_config_into_args!(
+        &config,
+        args,
+        Some(&remote),
+        "pr/list",
+        [
+            api,
+            api_url,
+            auth,
+            draft,
+            fields,
+            format,
+            interactive,
+            per_page,
+            state
+        ]
+    );
 
     let api_type = match args.api {
         Some(api_type) => api_type,
@@ -489,6 +374,7 @@ pub fn list_prs(mut args: PrListCommandArgs) -> anyhow::Result<()> {
                 labels: &args.labels,
                 page: args.page,
                 per_page: args.per_page.unwrap_or(DEFAULT_PER_PAGE),
+                query: args.query.as_deref(),
                 state: &args.state.unwrap_or_default(),
                 draft: args.draft,
             },
@@ -509,7 +395,13 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
     });
     let remote_result = git::get_remote_data(&remote_name);
 
-    args.merge_with_config(&config, remote_result.as_ref().ok());
+    merge_config_into_args!(
+        &config,
+        args,
+        remote_result.as_ref().ok(),
+        "pr/checkout",
+        [api, api_url, auth, author, draft, per_page, state]
+    );
 
     // Allow remote detection to fail if user provides --api explicitly.
     let api_type = match remote_result {
@@ -522,21 +414,18 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
             ),
         },
     };
-    let get_pr_ref = match api_type {
-        ApiType::GitHub => github::get_pr_ref,
-        ApiType::GitLab => gitlab::get_pr_ref,
-        ApiType::Gitea | ApiType::Forgejo => gitea::get_pr_ref,
-    };
+    let get_pr_ref = forge!(api_type, get_pr_ref);
     let pr_number = match args.number {
         Some(nr) => nr,
         None => {
             let remote = remote_result?;
-            let fetch_options = build_fetch_options_for_interactive_selection(
-                args.author,
-                args.draft,
-                args.labels,
-                args.state,
-            );
+            let fetch_options = build_fetch_options! {
+                "author": args.author,
+                "draft": args.draft,
+                "labels": args.labels,
+                "query": args.query,
+                "state": args.state,
+            };
 
             eprintln!("Loading pull requests...");
 
@@ -577,7 +466,24 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
 
-    args.merge_with_config(&config, Some(&remote));
+    merge_config_into_args!(
+        &config,
+        args,
+        Some(&remote),
+        "pr/create",
+        [
+            api,
+            api_url,
+            draft,
+            editor,
+            fill,
+            fill_first,
+            fill_verbose,
+            no_browser,
+            no_push,
+            target
+        ]
+    );
 
     let current_branch = git::get_current_branch()?;
     let target_branch = match args.target {
@@ -606,11 +512,7 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
         git::push_branch(&current_branch, &remote_name, true)?;
     }
 
-    let create_pr = match api_type {
-        ApiType::GitHub => github::create_pr,
-        ApiType::GitLab => gitlab::create_pr,
-        ApiType::Gitea | ApiType::Forgejo => gitea::create_pr,
-    };
+    let create_pr = forge!(api_type, create_pr);
 
     let (title, body) = if args.editor {
         get_title_and_body_for_pr_for_editor_flag(
@@ -781,11 +683,7 @@ fn get_title_and_body_for_pr_for_fill_verbose_flag(
 }
 
 fn list_prs_in_web_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
-    let get_prs_url = match api_type {
-        ApiType::GitHub => github::get_url_for_prs,
-        ApiType::GitLab => gitlab::get_url_for_prs,
-        ApiType::Forgejo | ApiType::Gitea => gitea::get_url_for_prs,
-    };
+    let get_prs_url = forge!(api_type, get_url_for_prs);
 
     open::that(get_prs_url(remote))?;
 
@@ -801,11 +699,7 @@ fn list_prs_to_stdout(
     output_format: &OutputFormat,
     use_auth: bool,
 ) -> anyhow::Result<()> {
-    let get_prs = match api_type {
-        ApiType::GitHub => github::get_prs,
-        ApiType::GitLab => gitlab::get_prs,
-        ApiType::Gitea | ApiType::Forgejo => gitea::get_prs,
-    };
+    let get_prs = forge!(api_type, get_prs);
     let response = get_prs(&HttpClient::new(), remote, api_url, filters, use_auth)?;
 
     let fields = if fields.is_empty() {
@@ -826,11 +720,12 @@ fn list_prs_interactively(
     api_type: ApiType,
     args: PrListCommandArgs,
 ) -> anyhow::Result<()> {
-    let fetch_options = build_fetch_options_for_interactive_selection(
-        args.author,
-        args.draft,
-        args.labels,
-        args.state,
+    let fetch_options = build_fetch_options!(
+        "author": args.author,
+        "draft": args.draft,
+        "labels": args.labels,
+        "query": args.query,
+        "state": args.state,
     );
 
     eprintln!("Loading pull requests...");
@@ -860,33 +755,6 @@ fn list_prs_interactively(
     Ok(())
 }
 
-fn build_fetch_options_for_interactive_selection(
-    author: Option<String>,
-    draft: bool,
-    labels: Vec<String>,
-    state: Option<PrState>,
-) -> FetchOptions {
-    let mut options_map = HashMap::new();
-
-    if let Some(author) = author {
-        options_map.insert(String::from("author"), author);
-    }
-
-    if draft {
-        options_map.insert(String::from("draft"), String::from("true"));
-    }
-
-    if !labels.is_empty() {
-        options_map.insert(String::from("labels"), labels.join(","));
-    }
-
-    if let Some(state) = state {
-        options_map.insert(String::from("state"), state.to_string());
-    }
-
-    FetchOptions::new(options_map)
-}
-
 fn select_pr_interactively(
     remote: GitRemoteData,
     api_type: ApiType,
@@ -895,11 +763,7 @@ fn select_pr_interactively(
     per_page: u32,
     use_auth: bool,
 ) -> anyhow::Result<Pr> {
-    let get_prs = match api_type {
-        ApiType::GitHub => github::get_prs,
-        ApiType::GitLab => gitlab::get_prs,
-        ApiType::Gitea | ApiType::Forgejo => gitea::get_prs,
-    };
+    let get_prs = forge!(api_type, get_prs);
 
     let http_client = HttpClient::new();
 
@@ -907,6 +771,7 @@ fn select_pr_interactively(
         let author: Option<&str> = options.parse_str("author");
         let draft: bool = options.parse("draft").unwrap_or_default();
         let labels: Vec<String> = options.parse_list("labels").unwrap_or_default();
+        let query: Option<&str> = options.parse_str("query");
         let state: PrState = options.parse_enum("state").unwrap_or_default();
 
         let response = get_prs(
@@ -919,6 +784,7 @@ fn select_pr_interactively(
                 labels: &labels,
                 page,
                 per_page,
+                query,
                 state: &state,
             },
             use_auth,

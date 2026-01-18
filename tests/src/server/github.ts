@@ -55,7 +55,129 @@ export function createGitHubServer(): express.Express {
 
     app.use(express.json());
 
-    // List issues endpoint
+    // GitHub Search API endpoint for issues and PRs
+    app.get("/api/v3/search/issues", (req: Request, res: Response) => {
+        const { q, page = "1", per_page = "30" } = req.query;
+
+        if (!q || typeof q !== "string") {
+            res.status(422).json({ message: "Validation Failed" });
+            return;
+        }
+
+        // Parse query string
+        const query = q.toString();
+        const isIssue = query.includes("is:issue");
+        const isPR = query.includes("is:pr");
+        const isOpen = query.includes("is:open");
+        const isClosed = query.includes("is:closed");
+        const isUnmerged = query.includes("is:unmerged");
+        const isMerged = query.includes("is:merged");
+        const isDraft = query.includes("draft:true");
+
+        // Extract search terms (words that are not qualifiers)
+        const searchTerms = query
+            .split(" ")
+            .filter(
+                (term) =>
+                    !term.startsWith("is:") &&
+                    !term.startsWith("repo:") &&
+                    !term.startsWith("author:") &&
+                    !term.startsWith("assignee:") &&
+                    !term.startsWith("label:") &&
+                    !term.startsWith("draft:") &&
+                    !term.startsWith("in:"),
+            )
+            .map((term) => term.toLowerCase());
+
+        // Extract qualifiers
+        const authorMatch = query.match(/author:(\S+)/);
+        const author = authorMatch ? authorMatch[1] : null;
+
+        const assigneeMatch = query.match(/assignee:(\S+)/);
+        const assignee = assigneeMatch ? assigneeMatch[1] : null;
+
+        const labelMatches = query.match(/label:(\S+)/g);
+        const labels =
+            labelMatches ?
+                labelMatches.map((l) => l.replace("label:", ""))
+            :   [];
+
+        // Start with appropriate items
+        let filtered: (Issue | PullRequest)[] = [];
+        if (isIssue) {
+            filtered = [...issues];
+        } else if (isPR) {
+            filtered = [...prs];
+        }
+
+        // Filter by state
+        if (isOpen) {
+            filtered = filtered.filter((item) => item.state === "open");
+        } else if (isClosed && isUnmerged) {
+            // Closed but not merged (PRs only)
+            filtered = filtered.filter(
+                (item) =>
+                    item.state === "closed" &&
+                    "merged_at" in item &&
+                    !item.merged_at,
+            );
+        } else if (isMerged) {
+            filtered = filtered.filter(
+                (item) => "merged_at" in item && item.merged_at !== null,
+            );
+        } else if (isClosed) {
+            filtered = filtered.filter((item) => item.state === "closed");
+        }
+
+        // Filter by author
+        if (author) {
+            filtered = filtered.filter((item) => item.user.login === author);
+        }
+
+        // Filter by assignee
+        if (assignee) {
+            filtered = filtered.filter(
+                (item) =>
+                    "assignee" in item && item.assignee?.login === assignee,
+            );
+        }
+
+        // Filter by labels
+        if (labels.length > 0) {
+            filtered = filtered.filter((item) =>
+                labels.every((label) =>
+                    item.labels.some((l) => l.name === label),
+                ),
+            );
+        }
+
+        // Filter by draft
+        if (isDraft) {
+            filtered = filtered.filter(
+                (item) => "draft" in item && item.draft === true,
+            );
+        }
+
+        // Filter by search terms (search in title and body)
+        if (searchTerms.length > 0) {
+            filtered = filtered.filter((item) =>
+                searchTerms.every((term) =>
+                    item.title.toLowerCase().includes(term),
+                ),
+            );
+        }
+
+        // Pagination
+        const pageNum = Number.parseInt(page as string, 10);
+        const perPage = Number.parseInt(per_page as string, 10);
+        const start = (pageNum - 1) * perPage;
+        const end = start + perPage;
+        const paginated = filtered.slice(start, end);
+
+        res.json({ items: paginated });
+    });
+
+    // List issues endpoint (kept for backward compatibility)
     app.get(
         "/api/v3/repos/:owner/:repo/issues",
         (req: Request, res: Response) => {

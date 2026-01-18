@@ -110,6 +110,77 @@ impl FetchOptions {
     }
 }
 
+/// Builds FetchOptions from key-value pairs.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let options: FetchOptions = build_fetch_options! {
+///     "assignee": args.assignee,
+///     "author": args.author,
+///     "labels": args.labels,
+///     "state": args.state,
+///     "draft": args.draft,
+///};
+/// ```
+#[macro_export]
+macro_rules! build_fetch_options {
+    ($($key:literal: $field:expr),* $(,)?) => {
+        {
+            let mut options_map = std::collections::HashMap::new();
+
+            $(
+                $crate::tui::__macro_internals::InsertIntoFetchOption::__insert_into_fetch_option(
+                    $field,
+                    &mut options_map,
+                    String::from($key)
+                );
+            )*
+
+            $crate::tui::FetchOptions::new(options_map)
+        }
+    };
+}
+
+/// Internal module for macro implementation details.
+///
+/// This module is public only for macro access but hidden from documentation.
+#[doc(hidden)]
+pub mod __macro_internals {
+    use std::collections::HashMap;
+
+    pub trait InsertIntoFetchOption {
+        /// Helper function for inserting values into FetchOptions macro.
+        /// It isn't meant to be called manually. Instead use the
+        /// build_fetch_options macro, which calls this function.
+        fn __insert_into_fetch_option(self, map: &mut HashMap<String, String>, key: String);
+    }
+
+    impl<T: ToString> InsertIntoFetchOption for Option<T> {
+        fn __insert_into_fetch_option(self, map: &mut HashMap<String, String>, key: String) {
+            if let Some(value) = self {
+                map.insert(key, value.to_string());
+            }
+        }
+    }
+
+    impl InsertIntoFetchOption for Vec<String> {
+        fn __insert_into_fetch_option(self, map: &mut HashMap<String, String>, key: String) {
+            if !self.is_empty() {
+                map.insert(key, self.join(","));
+            }
+        }
+    }
+
+    impl InsertIntoFetchOption for bool {
+        fn __insert_into_fetch_option(self, map: &mut HashMap<String, String>, key: String) {
+            if self {
+                map.insert(key, String::from("true"));
+            }
+        }
+    }
+}
+
 /// The response returned by the fetch function.
 pub struct FetchResult<T> {
     /// Whether the items should replace the existing ones
@@ -306,6 +377,16 @@ struct SearchState {
 }
 
 impl SearchState {
+    fn with_history_entry(entry: String) -> Self {
+        let mut state = Self::default();
+
+        if !entry.is_empty() {
+            state.history.push(entry);
+        }
+
+        state
+    }
+
     fn clear(&mut self) {
         self.exit_history_browsing();
         self.query.clear();
@@ -588,12 +669,18 @@ impl<T: ListableItem> App<T> {
             + Sync
             + 'static,
     {
+        let search = if initial_options.as_hash_map().is_empty() {
+            SearchState::default()
+        } else {
+            SearchState::with_history_entry(format_fetch_options(&initial_options))
+        };
+
         Self {
             mode: Mode::default(),
             item_fetcher: ItemFetcher::new(fetch, initial_options),
             list: ListState::new(),
             pagination: PaginationState::default(),
-            search: SearchState::default(),
+            search,
         }
     }
 
@@ -1061,6 +1148,30 @@ impl<T: ListableItem> App<T> {
         frame.render_widget(status_bar, areas[0]);
         frame.render_widget(nav_bar, areas[1]);
     }
+}
+
+fn format_fetch_options(options: &FetchOptions) -> String {
+    let mut result = String::new();
+    let map = options.as_hash_map();
+
+    if let Some(query) = map.get("query") {
+        result.push_str(query);
+    }
+
+    let mut sorted_keys: Vec<_> = map.keys().filter(|k| k.as_str() != "query").collect();
+    sorted_keys.sort();
+
+    for key in sorted_keys {
+        if let Some(value) = map.get(key) {
+            if !result.is_empty() {
+                result.push(' ');
+            }
+
+            result.push_str(&format!("@{key}={value}"));
+        }
+    }
+
+    result
 }
 
 fn parse_fetch_options(query: &str) -> FetchOptions {

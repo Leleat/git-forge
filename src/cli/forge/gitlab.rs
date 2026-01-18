@@ -4,7 +4,9 @@ use url::form_urlencoded::byte_serialize;
 
 use crate::{
     cli::{
-        forge::http_client::{HttpClient, PaginatedResponse, WithAuth, WithHttpStatusOk},
+        forge::http_client::{
+            self, HttpClient, IntoPaginatedResponse, PaginatedResponse, WithAuth, WithHttpStatusOk,
+        },
         issue::{CreateIssueOptions, Issue, IssueState, ListIssueFilters},
         pr::{CreatePrOptions, ListPrsFilters, Pr, PrState},
     },
@@ -68,8 +70,6 @@ struct GitLabMergeRequest {
     created_at: String,
     updated_at: String,
     web_url: String,
-    source_branch: String,
-    target_branch: String,
     draft: bool,
 }
 
@@ -88,8 +88,6 @@ impl From<GitLabMergeRequest> for Pr {
             labels: mr.labels,
             created_at: mr.created_at,
             updated_at: mr.updated_at,
-            source_branch: mr.source_branch,
-            target_branch: mr.target_branch,
             draft: mr.draft,
         }
     }
@@ -135,12 +133,21 @@ pub fn get_issues(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
-    request
+    if let Some(query) = filters.query {
+        request = request.query(&[("search", query)]);
+    }
+
+    let response = request
         .send()
         .context("Network request failed while fetching issues from GitLab")?
-        .with_http_status_ok()?
-        .try_into()
-        .map(|response: PaginatedResponse<GitLabIssue>| response.map(Into::into))
+        .with_http_status_ok()?;
+
+    let has_next_page = http_client::has_next_link_header(&response);
+
+    response
+        .json()
+        .context("Failed to parse GitHub Search API response")
+        .map(|vec: Vec<GitLabIssue>| vec.into_paginated_response(has_next_page))
 }
 
 pub fn create_issue(
@@ -208,16 +215,25 @@ pub fn get_prs(
         request = request.query(&[("labels", filters.labels.join(","))]);
     }
 
+    if let Some(query) = filters.query {
+        request = request.query(&[("search", query)]);
+    }
+
     if filters.draft {
         request = request.query(&[("wip", "yes")]);
     }
 
-    request
+    let response = request
         .send()
         .context("Network request failed while fetching merge requests from GitLab")?
-        .with_http_status_ok()?
-        .try_into()
-        .map(|response: PaginatedResponse<GitLabMergeRequest>| response.map(Into::into))
+        .with_http_status_ok()?;
+
+    let has_next_page = http_client::has_next_link_header(&response);
+
+    response
+        .json()
+        .context("Failed to parse GitHub Search API response")
+        .map(|vec: Vec<GitLabMergeRequest>| vec.into_paginated_response(has_next_page))
 }
 
 pub fn create_pr(

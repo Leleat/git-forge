@@ -1,6 +1,4 @@
-use anyhow::Context;
 use reqwest::blocking::{RequestBuilder, Response};
-use serde::de::DeserializeOwned;
 
 const USER_AGENT: &str = "git-forge";
 
@@ -41,54 +39,15 @@ impl<T> PaginatedResponse<T> {
             has_next_page,
         }
     }
-
-    /// Transforms the items while preserving pagination metadata.
-    pub fn map<U, F>(self, f: F) -> PaginatedResponse<U>
-    where
-        F: FnMut(T) -> U,
-    {
-        PaginatedResponse {
-            items: self.items.into_iter().map(f).collect(),
-            has_next_page: self.has_next_page,
-        }
-    }
-
-    /// Filters and transforms items while preserving pagination metadata.
-    pub fn filter_map<U, F>(self, f: F) -> PaginatedResponse<U>
-    where
-        F: FnMut(T) -> Option<U>,
-    {
-        PaginatedResponse {
-            items: self.items.into_iter().filter_map(f).collect(),
-            has_next_page: self.has_next_page,
-        }
-    }
 }
 
-impl<T> TryFrom<Response> for PaginatedResponse<T>
-where
-    T: DeserializeOwned,
-{
-    type Error = anyhow::Error;
+pub trait IntoPaginatedResponse<T> {
+    fn into_paginated_response(self, has_next_page: bool) -> PaginatedResponse<T>;
+}
 
-    fn try_from(value: Response) -> Result<Self, Self::Error> {
-        // Forges use Link headers for pagination
-        let has_next_page = value
-            .headers()
-            .get("link")
-            .and_then(|value| value.to_str().ok())
-            .map(|link_header| {
-                link_header
-                    .split(',')
-                    .any(|link| link.contains("rel=\"next\""))
-            })
-            .unwrap_or(false);
-
-        let items = value
-            .json::<Vec<T>>()
-            .context("Failed to parse API response")?;
-
-        Ok(PaginatedResponse::new(items, has_next_page))
+impl<S, T: From<S>> IntoPaginatedResponse<T> for Vec<S> {
+    fn into_paginated_response(self, has_next_page: bool) -> PaginatedResponse<T> {
+        PaginatedResponse::new(self.into_iter().map(Into::into).collect(), has_next_page)
     }
 }
 
@@ -149,4 +108,17 @@ impl WithHttpStatusOk for Response {
 
         Ok(self)
     }
+}
+
+pub fn has_next_link_header(response: &Response) -> bool {
+    response
+        .headers()
+        .get("link")
+        .and_then(|value| value.to_str().ok())
+        .map(|link_header| {
+            link_header
+                .split(',')
+                .any(|link| link.contains("rel=\"next\""))
+        })
+        .unwrap_or(false)
 }
