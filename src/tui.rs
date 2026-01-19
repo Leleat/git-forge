@@ -1,15 +1,20 @@
 //! Provides interactive TUI
 
 use clap::ValueEnum;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::{
+    ExecutableCommand,
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
+};
 use ratatui::{
-    Frame,
+    Frame, Terminal,
     layout::{Alignment, Constraint, Layout, Rect},
+    prelude::CrosstermBackend,
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{self, Block, Borders, HighlightSpacing, Paragraph, Wrap},
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, io, panic, sync::Arc};
 use std::{str::FromStr, thread};
 use std::{
     sync::mpsc::{self, Receiver},
@@ -39,26 +44,70 @@ where
         + Sync
         + 'static,
 {
+    let mut terminal = setup_tui()?;
     let mut app = App::new(fetch, initial_options);
-    let selected_index = ratatui::run(|terminal| {
-        loop {
-            terminal.draw(|frame| app.render(frame))?;
-            app.update()?;
 
-            if event::poll(Duration::from_millis(100))?
-                && let Event::Key(key_event) = event::read()?
-            {
-                match app.handle_key_event(key_event) {
-                    UserAction::None => {}
-                    UserAction::Quit => anyhow::bail!("Selection aborted"),
-                    UserAction::Select(index) => return Ok(index),
+    let selected_index = loop {
+        if let Err(e) = terminal.draw(|frame| app.render(frame)) {
+            break Err(anyhow::anyhow!(e));
+        };
+
+        if let Err(e) = app.update() {
+            break Err(anyhow::anyhow!(e));
+        };
+
+        match event::poll(Duration::from_millis(100)) {
+            Err(e) => break Err(anyhow::anyhow!(e)),
+            Ok(event_arrived) => {
+                if event_arrived {
+                    match event::read() {
+                        Err(e) => break Err(anyhow::anyhow!(e)),
+                        Ok(event) => {
+                            if let Event::Key(key_event) = event {
+                                match app.handle_key_event(key_event) {
+                                    UserAction::None => {}
+                                    UserAction::Quit => {
+                                        break Err(anyhow::anyhow!("Selection aborted"));
+                                    }
+                                    UserAction::Select(index) => {
+                                        break Ok(index);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        }
-    })?;
+        };
+    };
 
-    app.into_item(selected_index)
+    restore_tui()?;
+
+    app.into_item(selected_index?)
         .ok_or_else(|| anyhow::anyhow!("Invalid selection"))
+}
+
+fn setup_tui() -> io::Result<Terminal<CrosstermBackend<io::Stderr>>> {
+    let original_hook = panic::take_hook();
+
+    panic::set_hook(Box::new(move |panic_info| {
+        // intentionally ignore errors here since we're already in a panic
+        let _ = restore_tui();
+
+        original_hook(panic_info);
+    }));
+
+    terminal::enable_raw_mode()?;
+    io::stderr().execute(EnterAlternateScreen)?;
+
+    Terminal::new(CrosstermBackend::new(io::stderr()))
+}
+
+fn restore_tui() -> io::Result<()> {
+    terminal::disable_raw_mode()?;
+    io::stderr().execute(LeaveAlternateScreen)?;
+
+    Ok(())
 }
 
 /// Items that can be displayed in the selection UI.
