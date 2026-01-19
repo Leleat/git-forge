@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 (2026-01-19)
+
+### Bugfixes
+
+- write TUI to stderr to allow piping
+
+---
+
+Full Changelog: [v0.2.0...v0.2.1](https://github.com/Leleat/git-forge/compare/v0.2.0...v0.2.1)
+
 ## 0.2.0 (2026-01-18)
 
 ### Breaking Changes
