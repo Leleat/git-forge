@@ -8,76 +8,27 @@ A simple CLI tool for basic interactions with issues and pull requests across Gi
 ## Usage
 
 ```sh
+# Use -h or --help to get more information about each subcommand and option
 git forge [<subcommand>] [<options>]
 ```
 
-Note that git-forge tries to be forge-agnostic and abstract the forge-specific details away. This is the reason why git-forge only supports common features (e.g. issues, PRs). But even with just the common features, forges and their APIs may vary (slightly) in their capability. In case a forge doesn't support a specific feature, git-forge will error and tell you that the feature you are trying to use isn't supported by that specific forge. This however shouldn't be a problem in general. As of now, the only differences between forges is: Gitea/Forgejo doesn't support filtering PRs by `draft` or `merged` status.
+## Features
 
-### Subcommands
+git-forge tries to be forge-agnostic and abstract the forge-specific details away. This is the reason why git-forge only supports common features (e.g. issues, PRs). But even when only implementing common features, forges and their APIs may vary (slightly) in their capability. Here is an overview of each forge's feature set.
 
-```sh
-# git forge -h
-browse       Open repository links in your browser or print them to stdout
-completions  Generate shell completions # See limitations below
-config       Manage configuration settings
-issue        List issues from the remote repository
-pr           Interact with pull requests
-```
-
-```sh
-# git forge browse -h
-Open repository links in your browser or print them to stdout
-
-Usage: git-forge browse [OPTIONS] [<PATH[:<LINE_NUMBER>]>]
-
-Arguments:
-  [<PATH[:<LINE_NUMBER>]>]  The file or directory to open
-
-Options:
-  -c, --commit <COMMIT_ISH>  Open this commit-ish. If <PATH> is provided, open the file at this commit-ish
-  -i, --issues [<NUMBER>]    Open the issues page. If <NUMBER> is provided, open that specific issue
-  -n, --no-browser           Instead of opening the URL in your browser, print it to stdout
-  -p, --prs [<NUMBER>]       Open the PR page. If <NUMBER> is provided, open that specific pr
-```
-
-```sh
-# git forge config -h
-Manage configuration settings. Currently supported settings:
-
-  - editor-command: This command will be called instead of the default text editor when using the --editor flag. E.g. for vscode use `code --wait`
-  - <CLI_OPTIONS>: Most CLI options can be configured with a scoped default setting. See the config subcommands' help for more details.
-
-Usage: git-forge config <COMMAND>
-
-Commands:
-  get    Get configuration value(s)
-  set    Set a configuration value
-  unset  Unset a configuration value
-  edit   Edit the configuration file
-```
-
-```sh
-# git forge issue -h
-Interact with issues
-
-Usage: git-forge issue <COMMAND>
-
-Commands:
-  list    List issues
-  create  Create an issue and open it in the web browser
-```
-
-```sh
-# git forge pr -h
-Interact with pull requests
-
-Usage: git-forge pr <COMMAND>
-
-Commands:
-  checkout  Checkout a pull request locally
-  create    Create a new pull request from the current branch and open the pull request in the web browser
-  list      List pull requests
-```
+|                               | GitHub | GitLab | Gitea/Forgejo                             |
+| ----------------------------- | ------ | ------ | ----------------------------------------- |
+| `browse --commit <COMMITISH>` | ✅     | ✅     | ✅                                        |
+| `browse --issues [<NUMBER>]`  | ✅     | ✅     | ✅                                        |
+| `browse --prs [<NUMBER>]`     | ✅     | ✅     | ✅                                        |
+| `browse --releases`           | ✅     | ✅     | ✅                                        |
+| `completions <SHELL>`         | ✅     | ✅     | ✅                                        |
+| `config <SUBCOMMAND>`         | ✅     | ✅     | ✅                                        |
+| `issue create [<OPTIONS>]`    | ✅     | ✅     | ✅                                        |
+| `issue list [<OPTIONS>]`      | ✅     | ✅     | ✅                                        |
+| `pr checkout [<NUMBER>]`      | ✅     | ✅     | ✅                                        |
+| `pr create [<OPTIONS>]`       | ✅     | ✅     | ✅                                        |
+| `pr list [<OPTIONS>]`         | ✅     | ✅     | ✅ except `--draft` and `--status=merged` |
 
 ### Shell Completions
 
