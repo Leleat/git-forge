@@ -8,12 +8,19 @@ A simple CLI tool for basic interactions with issues and pull requests across Gi
 ## Usage
 
 ```sh
+# Use -h or --help to get more information about each subcommand and option
 git forge [<subcommand>] [<options>]
 ```
 
-Note that git-forge tries to be forge-agnostic and abstract the forge-specific details away. This is the reason why git-forge only supports common features (e.g. issues, PRs). But even with just the common features, forges and their APIs may vary (slightly) in their capability. In case a forge doesn't support a specific feature, git-forge will error and tell you that the feature you are trying to use isn't supported by that specific forge. This however shouldn't be a problem in general. As of now, the only differences between forges is: Gitea/Forgejo doesn't support filtering PRs by `draft` or `merged` status.
+Here is a demo showcasing the interactive issue selection with `git forge issue list --interactive`
 
-### Subcommands
+![Demo of "git forge issue list"](./docs/assets/demo-issue-list.gif)
+
+Here is a demo showcasing the creation of a PR with automatic filling of the PR title and body based on the git history with `git forge pr create --fill-verbose`
+
+![Demo of "git forge pr create"](./docs/assets/demo-pr-create.gif)
+
+## Features
 
 ```sh
 # git forge -h
@@ -78,6 +85,24 @@ Commands:
   create    Create a new pull request from the current branch and open the pull request in the web browser
   list      List pull requests
 ```
+
+### Forge Support
+
+git-forge tries to be forge-agnostic and abstract the forge-specific details away. This is the reason why git-forge only supports common features (e.g. issues, PRs). But even when only implementing common features, forges and their APIs may vary (slightly) in their capability. Here is an overview of each forge's feature set.
+
+|                               | GitHub | GitLab | Gitea/Forgejo                             |
+| ----------------------------- | ------ | ------ | ----------------------------------------- |
+| `browse --commit <COMMITISH>` | ✅     | ✅     | ✅                                        |
+| `browse --issues [<NUMBER>]`  | ✅     | ✅     | ✅                                        |
+| `browse --prs [<NUMBER>]`     | ✅     | ✅     | ✅                                        |
+| `browse --releases`           | ✅     | ✅     | ✅                                        |
+| `completions <SHELL>`         | ✅     | ✅     | ✅                                        |
+| `config <SUBCOMMAND>`         | ✅     | ✅     | ✅                                        |
+| `issue create [<OPTIONS>]`    | ✅     | ✅     | ✅                                        |
+| `issue list [<OPTIONS>]`      | ✅     | ✅     | ✅                                        |
+| `pr checkout [<NUMBER>]`      | ✅     | ✅     | ✅                                        |
+| `pr create [<OPTIONS>]`       | ✅     | ✅     | ✅                                        |
+| `pr list [<OPTIONS>]`         | ✅     | ✅     | ✅ except `--draft` and `--status=merged` |
 
 ### Shell Completions
 
