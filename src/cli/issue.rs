@@ -6,15 +6,12 @@ use dialoguer::Input;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    build_fetch_options,
     cli::{
-        config::Config,
+        config::{self, Config},
         forge::{self, ApiType, HttpClient, gitea, github, gitlab},
     },
-    forge,
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
-    merge_config_into_args,
     tui::{self, FetchOptions, ListableItem},
 };
 
@@ -242,7 +239,7 @@ pub fn list_issues(mut args: IssueListCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
 
-    merge_config_into_args!(
+    config::merge_config_into_args!(
         &config,
         args,
         Some(&remote),
@@ -301,7 +298,7 @@ pub fn create_issue(mut args: IssueCreateCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
 
-    merge_config_into_args!(
+    config::merge_config_into_args!(
         &config,
         args,
         Some(&remote),
@@ -355,7 +352,7 @@ pub fn create_issue(mut args: IssueCreateCommandArgs) -> anyhow::Result<()> {
 // =============================================================================
 
 fn list_issues_in_web_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
-    let get_issues_url = forge!(api_type, get_url_for_issues);
+    let get_issues_url = forge::function!(api_type, get_url_for_issues);
 
     open::that(get_issues_url(remote))?;
 
@@ -371,7 +368,7 @@ fn list_issues_to_stdout(
     output_format: &OutputFormat,
     use_auth: bool,
 ) -> anyhow::Result<()> {
-    let get_issues = forge!(api_type, get_issues);
+    let get_issues = forge::function!(api_type, get_issues);
     let response = get_issues(&HttpClient::new(), remote, api_url, filters, use_auth)
         .context("Failed fetching issues")?;
 
@@ -393,7 +390,7 @@ fn list_issues_interactively(
     api_type: ApiType,
     args: IssueListCommandArgs,
 ) -> anyhow::Result<()> {
-    let fetch_options = build_fetch_options! {
+    let fetch_options = tui::build_fetch_options! {
         "assignee": args.assignee,
         "author": args.author,
         "labels": args.labels,
@@ -436,7 +433,7 @@ fn select_issue_interactively(
     per_page: u32,
     use_auth: bool,
 ) -> anyhow::Result<Issue> {
-    let get_issues = forge!(api_type, get_issues);
+    let get_issues = forge::function!(api_type, get_issues);
     let http_client = HttpClient::new();
 
     tui::select_item_with(initial_options, move |page, options, result| {
@@ -469,7 +466,7 @@ fn select_issue_interactively(
 }
 
 fn create_issue_via_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
-    let url = forge!(api_type, get_url_for_issue_creation)(remote);
+    let url = forge::function!(api_type, get_url_for_issue_creation)(remote);
 
     open::that(url)?;
 
@@ -512,7 +509,7 @@ fn create_issue_via_api(
     no_browser: bool,
 ) -> anyhow::Result<()> {
     let http_client = HttpClient::new();
-    let create_issue = forge!(api_type, create_issue);
+    let create_issue = forge::function!(api_type, create_issue);
     let issue = create_issue(&http_client, remote, api_url, create_options)?;
 
     if no_browser {

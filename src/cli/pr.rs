@@ -6,15 +6,12 @@ use dialoguer::Input;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    build_fetch_options,
     cli::{
-        config::Config,
+        config::{self, Config},
         forge::{self, ApiType, HttpClient, gitea, github, gitlab},
     },
-    forge,
     git::{self, GitRemoteData},
     io::{self, OutputFormat},
-    merge_config_into_args,
     tui::{self, FetchOptions, ListableItem},
 };
 
@@ -336,7 +333,7 @@ pub fn list_prs(mut args: PrListCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
 
-    merge_config_into_args!(
+    config::merge_config_into_args!(
         &config,
         args,
         Some(&remote),
@@ -395,7 +392,7 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
     });
     let remote_result = git::get_remote_data(&remote_name);
 
-    merge_config_into_args!(
+    config::merge_config_into_args!(
         &config,
         args,
         remote_result.as_ref().ok(),
@@ -414,12 +411,12 @@ pub fn checkout_pr(mut args: PrCheckoutCommandArgs) -> anyhow::Result<()> {
             ),
         },
     };
-    let get_pr_ref = forge!(api_type, get_pr_ref);
+    let get_pr_ref = forge::function!(api_type, get_pr_ref);
     let pr_number = match args.number {
         Some(nr) => nr,
         None => {
             let remote = remote_result?;
-            let fetch_options = build_fetch_options! {
+            let fetch_options = tui::build_fetch_options! {
                 "author": args.author,
                 "draft": args.draft,
                 "labels": args.labels,
@@ -466,7 +463,7 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
     let remote = git::get_remote_data(&remote_name)
         .with_context(|| format!("Failed to parse remote URL for remote '{}'", &remote_name))?;
 
-    merge_config_into_args!(
+    config::merge_config_into_args!(
         &config,
         args,
         Some(&remote),
@@ -512,7 +509,7 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
         git::push_branch(&current_branch, &remote_name, true)?;
     }
 
-    let create_pr = forge!(api_type, create_pr);
+    let create_pr = forge::function!(api_type, create_pr);
 
     let (title, body) = if args.editor {
         get_title_and_body_for_pr_for_editor_flag(
@@ -683,7 +680,7 @@ fn get_title_and_body_for_pr_for_fill_verbose_flag(
 }
 
 fn list_prs_in_web_browser(remote: &GitRemoteData, api_type: &ApiType) -> anyhow::Result<()> {
-    let get_prs_url = forge!(api_type, get_url_for_prs);
+    let get_prs_url = forge::function!(api_type, get_url_for_prs);
 
     open::that(get_prs_url(remote))?;
 
@@ -699,7 +696,7 @@ fn list_prs_to_stdout(
     output_format: &OutputFormat,
     use_auth: bool,
 ) -> anyhow::Result<()> {
-    let get_prs = forge!(api_type, get_prs);
+    let get_prs = forge::function!(api_type, get_prs);
     let response = get_prs(&HttpClient::new(), remote, api_url, filters, use_auth)?;
 
     let fields = if fields.is_empty() {
@@ -720,7 +717,7 @@ fn list_prs_interactively(
     api_type: ApiType,
     args: PrListCommandArgs,
 ) -> anyhow::Result<()> {
-    let fetch_options = build_fetch_options!(
+    let fetch_options = tui::build_fetch_options!(
         "author": args.author,
         "draft": args.draft,
         "labels": args.labels,
@@ -763,7 +760,7 @@ fn select_pr_interactively(
     per_page: u32,
     use_auth: bool,
 ) -> anyhow::Result<Pr> {
-    let get_prs = forge!(api_type, get_prs);
+    let get_prs = forge::function!(api_type, get_prs);
 
     let http_client = HttpClient::new();
 

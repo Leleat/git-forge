@@ -424,7 +424,6 @@ impl<'a> ConfigSource<'a> {
 ///     );
 /// }
 /// ```
-#[macro_export]
 macro_rules! merge_config_into_args {
     ($config:expr, $args:expr, $remote:expr, $command_path:literal, [$($field:ident),* $(,)?]$(,)?) => {
         $(
@@ -432,7 +431,7 @@ macro_rules! merge_config_into_args {
                 let field_name = stringify!($field).replace('_', "-");
                 let config_path = format!("{}/{}", $command_path, field_name);
 
-                $crate::cli::config::__macro_internals::MergeConfigIntoArg::__merge_with_config(
+                $crate::cli::config::macro_internals::MergeConfigIntoArg::__merge_with_config(
                     &mut $args.$field,
                     $config,
                     &config_path,
@@ -443,11 +442,12 @@ macro_rules! merge_config_into_args {
     };
 }
 
+pub(crate) use merge_config_into_args;
+
 /// Internal module for macro implementation details.
 ///
 /// This module is public only for macro access but hidden from documentation.
-#[doc(hidden)]
-pub mod __macro_internals {
+pub(crate) mod macro_internals {
     use super::{ApiType, Config, GitRemoteData, IssueState, OutputFormat, PrState};
     use clap::ValueEnum;
 

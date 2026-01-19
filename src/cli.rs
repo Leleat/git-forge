@@ -6,6 +6,7 @@ mod forge {
     mod api_type;
     mod http_client;
 
+    pub(crate) use api_type::function;
     pub use api_type::{ApiType, guess_api_type_from_host};
     pub use http_client::HttpClient;
 }
