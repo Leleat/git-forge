@@ -152,6 +152,10 @@ pub struct PrCreateCommandArgs {
     /// PR title
     #[arg(long)]
     title: Option<String>,
+
+    /// Create a PR in the web browser
+    #[arg(short, long)]
+    web: bool,
 }
 
 /// Command-line arguments for listing pull requests.
@@ -509,6 +513,10 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
         git::push_branch(&current_branch, &remote_name, true)?;
     }
 
+    if args.web {
+        return create_pr_in_browser(&api_type, &remote, &target_branch, &current_branch);
+    }
+
     let create_pr = forge::function!(api_type, create_pr);
 
     let (title, body) = if args.editor {
@@ -579,6 +587,27 @@ pub fn create_pr(mut args: PrCreateCommandArgs) -> anyhow::Result<()> {
 // =============================================================================
 // Private Helpers
 // =============================================================================
+
+fn create_pr_in_browser(
+    api_type: &ApiType,
+    remote: &GitRemoteData,
+    target_branch: &str,
+    source_branch: &str,
+) -> anyhow::Result<()> {
+    let get_url_for_creation = forge::function!(api_type, get_url_for_pr_creation);
+
+    let url = get_url_for_creation(remote, target_branch, source_branch);
+
+    eprintln!(
+        "Opening URL to create PR for {source_branch} targeting {target_branch} in browser..."
+    );
+
+    open::that(&url)?;
+
+    eprintln!("Opened URL in browser: {url}");
+
+    Ok(())
+}
 
 fn get_title_and_body_for_pr_for_editor_flag(
     editor_command: Option<&str>,
