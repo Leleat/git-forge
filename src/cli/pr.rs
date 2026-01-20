@@ -184,11 +184,11 @@ pub struct PrListCommandArgs {
     draft: bool,
 
     /// Fields to include in output (comma-separated)
-    #[arg(long, value_delimiter = ',')]
+    #[arg(short, long, value_delimiter = ',')]
     fields: Vec<PrField>,
 
     /// Output format
-    #[arg(long)]
+    #[arg(short = 'o', long)]
     format: Option<OutputFormat>,
 
     /// Use interactive TUI for searching and selecting a PR
