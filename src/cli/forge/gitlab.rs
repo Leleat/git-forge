@@ -302,6 +302,18 @@ pub fn get_url_for_pr(remote: &GitRemoteData, pr_number: u32) -> String {
     )
 }
 
+pub fn get_url_for_pr_creation(
+    remote: &GitRemoteData,
+    target_branch: &str,
+    source_branch: &str,
+) -> String {
+    let base_url = build_web_base_url(remote);
+
+    format!(
+        "{base_url}/merge_requests/new?merge_request[source_branch]={source_branch}&merge_request[target_branch]={target_branch}"
+    )
+}
+
 pub fn get_url_for_prs(remote: &GitRemoteData) -> String {
     format!("{}/-/merge_requests", build_web_base_url(remote))
 }

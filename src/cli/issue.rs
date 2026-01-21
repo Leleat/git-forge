@@ -70,7 +70,7 @@ pub struct IssueListCommandArgs {
     fields: Vec<IssueField>,
 
     /// Output format
-    #[arg(long)]
+    #[arg(short = 'o', long)]
     format: Option<OutputFormat>,
 
     /// Use interactive TUI for searching and selecting an issue
