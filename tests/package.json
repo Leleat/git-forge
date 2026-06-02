@@ -20,7 +20,7 @@
     "prettier": "^3.7.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.50.1",
-    "vitest": "^4.0.16"
+    "vitest": "^4.1.0"
   },
   "dependencies": {
     "express": "^5.2.1"
